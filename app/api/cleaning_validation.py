@@ -185,7 +185,7 @@ def calculate_maco_advanced(
     }
 
 # ============================================
-# BRACKETING MATRIX ENDPOINTS (FIXED)
+# BRACKETING MATRIX ENDPOINT (FIXED - Replace only this)
 # ============================================
 
 @router.post("/bracketing-matrix")

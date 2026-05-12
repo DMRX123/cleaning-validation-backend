@@ -1,3 +1,4 @@
+# app/services/bracketing_service.py - COMPLETE FIXED VERSION
 from sqlalchemy.orm import Session
 from ..models.bracketing import BracketingGroup, BracketingProduct, BracketingWorstCase
 from ..models.product import Product
@@ -35,27 +36,32 @@ class BracketingService:
         return {
             "product_id": product.id,
             "product_name": product.name,
-            "total_rating": total_rating,
-            "ratings": {
-                "hardest_to_clean": difficulty_rating,
-                "solubility": solubility_rating,
-                "toxicity": toxicity_rating,
-                "dose": dose_rating
-            }
+            "total_rating": total_rating
         }
     
     @classmethod
+    def select_worst_case(cls, products):
+        """Select worst case product from a bracketing group"""
+        if not products:
+            return None
+        
+        rated_products = [cls.calculate_product_rating(p) for p in products]
+        worst_case_data = max(rated_products, key=lambda x: x["total_rating"])
+        
+        for p in products:
+            if p.id == worst_case_data["product_id"]:
+                return p
+        
+        return None
+    
+    @classmethod
     def create_bracketing_matrix(cls, products):
+        """Create bracketing matrix with ratings"""
         matrix = []
         for product in products:
             rating = cls.calculate_product_rating(product)
             matrix.append({
                 "Substance": product.name,
-                "Cleaning Method Class": cls._get_cleaning_class(product),
-                "a) Hardest to clean": rating["ratings"]["hardest_to_clean"],
-                "b) Solubility": rating["ratings"]["solubility"],
-                "c) ADE/PDE": rating["ratings"]["toxicity"],
-                "d) Therapeutic dose": rating["ratings"]["dose"],
                 "Total Rating": rating["total_rating"]
             })
         
@@ -68,14 +74,3 @@ class BracketingService:
             "total_products_in_bracket": len(products),
             "recommendation": f"Select {worst_case['Substance']} as the worst case for validation" if worst_case else "No products to validate"
         }
-    
-    @staticmethod
-    def _get_cleaning_class(product):
-        if product.solubility in ["Very Soluble", "Freely Soluble"]:
-            return "Class I (Water soluble)"
-        elif product.solubility in ["Soluble", "Sparingly Soluble"]:
-            return "Class II (Methanol soluble)"
-        elif product.solubility in ["Slightly Soluble"]:
-            return "Class III (Acetone soluble)"
-        else:
-            return "Class IV (Special procedure)"
