@@ -42,26 +42,29 @@ class BracketingRequest(BaseModel):
     equipment_type: str
     product_ids: List[int]
 
+class CleaningLevelRequest(BaseModel):
+    previous_product_id: int
+    next_product_id: int
+    same_synthetic_chain: bool = False
+
 # ============================================
 # CLEANING LEVEL ENDPOINTS
 # ============================================
 
 @router.post("/determine-cleaning-level")
 def determine_cleaning_level(
-    previous_product_id: int, 
-    next_product_id: int,
-    same_synthetic_chain: bool = False,
+    request: CleaningLevelRequest,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     """Section 5.0 - Determine cleaning level based on risk"""
-    previous = db.query(Product).filter(Product.id == previous_product_id).first()
-    next_product = db.query(Product).filter(Product.id == next_product_id).first()
+    previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
+    next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
     
     if not previous or not next_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    level = CleaningLevelService.determine_level(previous, next_product, same_synthetic_chain)
+    level = CleaningLevelService.determine_level(previous, next_product, request.same_synthetic_chain)
     requirements = CleaningLevelService.get_level_requirements(level)
     justification = CleaningLevelService.get_level_justification(level, previous, next_product)
     
@@ -185,7 +188,7 @@ def calculate_maco_advanced(
     }
 
 # ============================================
-# BRACKETING MATRIX ENDPOINT (FIXED - Replace only this)
+# BRACKETING MATRIX ENDPOINT
 # ============================================
 
 @router.post("/bracketing-matrix")

@@ -10,8 +10,10 @@ import os
 import subprocess
 import sys
 
+from .api import auth
+
 from .api import (
-    auth, products, equipment, calculations, validation, 
+    products, equipment, calculations, validation, 
     reports, static_data, dashboard, cleaning_validation, protocols
 )
 from .database import init_db, get_db

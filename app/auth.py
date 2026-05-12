@@ -3,10 +3,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from jose import JWTError, jwt
-from ..database import get_db
-from ..models.user import User
-from ..services.auth import AuthService
-from ..config import config
+from .database import get_db
+from .models.user import User
+from .services.auth import AuthService
+from .config import config
 from pydantic import BaseModel
 
 router = APIRouter()

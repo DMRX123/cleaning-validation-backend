@@ -12,6 +12,7 @@ from ..services.rinse import RinseService
 from ..services.acceptability import AcceptabilityService
 from ..services.extra_area import ExtraAreaService
 from ..services.equipment_filter import EquipmentFilterService
+from .auth import get_current_user  # ADD THIS LINE
 from pydantic import BaseModel
 from datetime import datetime
 import uuid
@@ -68,6 +69,12 @@ def get_session(session_id: int, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
+
+@router.get("/history")
+def get_validation_history(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+    """Get all validation sessions for history/chart"""
+    sessions = db.query(ValidationSession).order_by(ValidationSession.created_at.desc()).all()
+    return sessions
 
 @router.post("/standard-prep")
 def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)):
