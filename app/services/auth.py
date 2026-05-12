@@ -1,40 +1,41 @@
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from ..models.user import User
 from ..config import config
+import bcrypt
 import hashlib
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class AuthService:
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify a plain password against a hashed password"""
-        # Special case for temporary admin password
-        if hashed_password == 'admin_temp_hash' and plain_password == 'Admin@123':
-            return True
+        # Check for empty or None
+        if not plain_password or not hashed_password:
+            return False
+            
+        # Check if it's a bcrypt hash (starts with $2b$)
+        if hashed_password.startswith('$2b$'):
+            try:
+                return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+            except:
+                pass
         
         # Check if it's a simple SHA256 hash (for development)
         if len(hashed_password) == 64 and all(c in '0123456789abcdef' for c in hashed_password):
             return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
         
-        # Normal bcrypt verification
-        try:
-            return pwd_context.verify(plain_password, hashed_password)
-        except:
-            return False
+        # Fallback for temporary hash
+        if hashed_password == 'admin_temp_hash' and plain_password == 'Admin@123':
+            return True
+            
+        return False
     
     @staticmethod
     def get_password_hash(password: str) -> str:
-        """Hash a password"""
-        try:
-            return pwd_context.hash(password)
-        except:
-            # Fallback to SHA256 for development
-            return hashlib.sha256(password.encode()).hexdigest()
+        """Hash a password using bcrypt"""
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
     
     @staticmethod
     def authenticate_user(db: Session, username: str, password: str):
