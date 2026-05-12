@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List
 from ..database import get_db
+from ..api.dependencies import get_current_user
 from ..models.cleaning_level import CleaningLevelEnum
 from ..models.product import Product
 from ..models.equipment import Equipment
@@ -41,12 +42,17 @@ class BracketingRequest(BaseModel):
     equipment_type: str
     product_ids: List[int]
 
+# ============================================
+# CLEANING LEVEL ENDPOINTS
+# ============================================
+
 @router.post("/determine-cleaning-level")
 def determine_cleaning_level(
     previous_product_id: int, 
     next_product_id: int,
     same_synthetic_chain: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
 ):
     """Section 5.0 - Determine cleaning level based on risk"""
     previous = db.query(Product).filter(Product.id == previous_product_id).first()
@@ -60,13 +66,22 @@ def determine_cleaning_level(
     justification = CleaningLevelService.get_level_justification(level, previous, next_product)
     
     return {
+        "success": True,
         "cleaning_level": level.value,
         "requirements": requirements,
         "justification": justification
     }
 
+# ============================================
+# HOLD TIME ENDPOINTS
+# ============================================
+
 @router.post("/validate-dirty-hold-time")
-def validate_dirty_hold_time(request: HoldTimeRequest, db: Session = Depends(get_db)):
+def validate_dirty_hold_time(
+    request: HoldTimeRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Section 9.7 - Validate Dirty Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
@@ -80,10 +95,17 @@ def validate_dirty_hold_time(request: HoldTimeRequest, db: Session = Depends(get
         request.max_dht_hours
     )
     
-    return result
+    return {
+        "success": True,
+        "data": result
+    }
 
 @router.post("/validate-clean-hold-time")
-def validate_clean_hold_time(request: CleanHoldTimeRequest, db: Session = Depends(get_db)):
+def validate_clean_hold_time(
+    request: CleanHoldTimeRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Section 9.7 - Validate Clean Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
@@ -97,10 +119,46 @@ def validate_clean_hold_time(request: CleanHoldTimeRequest, db: Session = Depend
         request.storage_conditions
     )
     
-    return result
+    return {
+        "success": True,
+        "data": result
+    }
+
+@router.post("/extend-hold-time")
+def extend_hold_time(
+    equipment_id: int,
+    hold_type: str,
+    current_max: float,
+    requested_max: float,
+    justification: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Extend validated hold time with justification"""
+    equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    if hold_type not in ["DHT", "CHT"]:
+        raise HTTPException(status_code=400, detail="hold_type must be DHT or CHT")
+    
+    result = HoldTimeService.extend_hold_time(equipment_id, hold_type, current_max, requested_max, justification)
+    
+    return {
+        "success": True,
+        "data": result
+    }
+
+# ============================================
+# MACO CALCULATION ENDPOINTS
+# ============================================
 
 @router.post("/maco-advanced")
-def calculate_maco_advanced(request: MACORequestAdvanced, db: Session = Depends(get_db)):
+def calculate_maco_advanced(
+    request: MACORequestAdvanced, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Section 4.2.1 - Advanced MACO with PF, SF, and production type factor"""
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
@@ -121,21 +179,39 @@ def calculate_maco_advanced(request: MACORequestAdvanced, db: Session = Depends(
     result["rationale"] = LimitRationaleService.get_rationale(request.production_type, [])
     result["production_type_factor_applied"] = factor
     
-    return result
+    return {
+        "success": True,
+        "data": result
+    }
+
+# ============================================
+# BRACKETING MATRIX ENDPOINTS (FIXED)
+# ============================================
 
 @router.post("/bracketing-matrix")
-def create_bracketing_matrix(request: BracketingRequest, db: Session = Depends(get_db)):
+def create_bracketing_matrix(
+    request: BracketingRequest, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """Section 7.5 - Create worst case rating matrix"""
+    if not request.product_ids:
+        raise HTTPException(status_code=400, detail="product_ids cannot be empty")
+    
     products = db.query(Product).filter(Product.id.in_(request.product_ids)).all()
     
     if not products:
         raise HTTPException(status_code=404, detail="No products found")
     
-    matrix = BracketingService.create_bracketing_matrix(products)
+    # Get bracketing matrix from service
+    matrix_result = BracketingService.create_bracketing_matrix(products)
+    
+    # Get worst case product
     worst_case = BracketingService.select_worst_case(products)
     
     return {
-        "bracketing_matrix": matrix,
+        "success": True,
+        "bracketing_matrix": matrix_result.get("bracketing_matrix", []),
         "worst_case_product": {
             "id": worst_case.id,
             "name": worst_case.name
@@ -144,47 +220,72 @@ def create_bracketing_matrix(request: BracketingRequest, db: Session = Depends(g
         "total_products_in_bracket": len(products)
     }
 
+# ============================================
+# MICROBIOLOGICAL ENDPOINTS
+# ============================================
+
 @router.get("/microbiological-limits/{product_type}")
-def get_microbiological_limits(product_type: str):
+def get_microbiological_limits(
+    product_type: str,
+    current_user = Depends(get_current_user)
+):
     """Section 8.1 - Get microbiological limits by product type"""
+    valid_types = ["oral", "parenteral", "topical", "biotech", "inhalation"]
+    if product_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid product_type. Must be one of: {valid_types}")
+    
     limits = MicrobiologicalService.get_default_limits(product_type)
     sampling_frequency = MicrobiologicalService.get_sampling_frequency("LEVEL_2", product_type)
     
     return {
+        "success": True,
         "product_type": product_type,
         "limits": limits,
         "sampling_frequency": sampling_frequency,
         "reference": "APIC Cleaning Validation Guide Section 8.1 - EMA 158/01"
     }
 
+# ============================================
+# LIMIT RATIONALE ENDPOINTS
+# ============================================
+
 @router.get("/limit-rationale/{production_type}")
-def get_limit_rationale(production_type: str, has_purification: bool = False):
+def get_limit_rationale(
+    production_type: str, 
+    has_purification: bool = False,
+    current_user = Depends(get_current_user)
+):
     """Section 4.2.6 - Get scientific rationale for different limits"""
+    valid_types = ["pharmaceutical", "api_chemical", "api_physical", "intermediate_early", "intermediate_late", "dedicated"]
+    if production_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid production_type. Must be one of: {valid_types}")
+    
     process_steps = ["crystallization"] if has_purification else []
     rationale = LimitRationaleService.get_rationale(production_type, process_steps)
-    return rationale
-
-@router.get("/hold-time-defaults/{equipment_type}")
-def get_hold_time_defaults(equipment_type: str):
-    """Get default hold time limits for equipment type"""
-    defaults = HoldTimeService.get_default_limits(equipment_type)
+    
     return {
-        "equipment_type": equipment_type,
-        "default_dirty_hold_time_hours": defaults["dht"],
-        "default_clean_hold_time_hours": defaults["cht"],
-        "max_dirty_hold_time_hours": defaults.get("dht_max", defaults["dht"] * 2),
-        "max_clean_hold_time_hours": defaults.get("cht_max", defaults["cht"] * 2)
+        "success": True,
+        "data": rationale
     }
 
-@router.post("/extend-hold-time")
-def extend_hold_time(
-    equipment_id: int,
-    hold_type: str,
-    current_max: float,
-    requested_max: float,
-    justification: str,
-    db: Session = Depends(get_db)
+# ============================================
+# HOLD TIME DEFAULTS ENDPOINTS
+# ============================================
+
+@router.get("/hold-time-defaults/{equipment_type}")
+def get_hold_time_defaults(
+    equipment_type: str,
+    current_user = Depends(get_current_user)
 ):
-    """Extend validated hold time with justification"""
-    result = HoldTimeService.extend_hold_time(equipment_id, hold_type, current_max, requested_max, justification)
-    return result
+    """Get default hold time limits for equipment type"""
+    defaults = HoldTimeService.get_default_limits(equipment_type)
+    
+    return {
+        "success": True,
+        "equipment_type": equipment_type,
+        "default_dirty_hold_time_hours": defaults.get("dht", 24),
+        "default_clean_hold_time_hours": defaults.get("cht", 72),
+        "max_dirty_hold_time_hours": defaults.get("dht_max", defaults.get("dht", 24) * 2),
+        "max_clean_hold_time_hours": defaults.get("cht_max", defaults.get("cht", 72) * 2),
+        "reference": "APIC Cleaning Validation Guide Section 9.7"
+    }
