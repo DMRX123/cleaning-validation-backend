@@ -1,3 +1,5 @@
+# Create requirements.txt if not exists
+@"
 fastapi
 uvicorn[standard]
 sqlalchemy
@@ -18,3 +20,9 @@ email-validator
 websockets
 typing-extensions
 httpx
+"@ | Out-File -FilePath requirements.txt -Encoding utf8
+
+# Add and commit
+git add requirements.txt
+git commit -m "Add requirements.txt"
+git push origin main
