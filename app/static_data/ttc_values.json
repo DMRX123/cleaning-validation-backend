@@ -1,0 +1,25 @@
+{
+    "ttc_values_mg_per_day": {
+        "carcinogenic": 0.001,
+        "potent_highly_toxic": 0.010,
+        "standard": 0.100
+    },
+    "categories": {
+        "carcinogenic": {
+            "description": "Compounds with carcinogenic potential",
+            "criteria": "Positive in vitro mutagenicity + in vivo confirmation",
+            "example": "Genotoxic compounds"
+        },
+        "potent_highly_toxic": {
+            "description": "Compounds with high potency or toxicity",
+            "criteria": "Evidence of effects at very low doses",
+            "example": "Potent APIs, hormones"
+        },
+        "standard": {
+            "description": "Standard organic compounds",
+            "criteria": "No evidence of unusual toxicity",
+            "example": "Most intermediates and APIs"
+        }
+    },
+    "reference": "APIC Cleaning Validation Guide Section 4.2.1.3 - Dolan et al. 2005"
+}

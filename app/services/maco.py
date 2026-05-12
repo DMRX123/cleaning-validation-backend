@@ -1,0 +1,103 @@
+from sqlalchemy.orm import Session
+from ..models.product import Product
+from ..utils.constants import SAFETY_FACTOR, PPM_FACTOR
+
+class MACOService:
+    """Excel MACO calculation - Complete APIC Guideline compliant"""
+    
+    @staticmethod
+    def method_10ppm(next_product: Product) -> float:
+        """
+        Section 4.2.2 - General Limit (10 ppm)
+        MACO = 0.00001 x Min Batch Next (mg)
+        """
+        if next_product and next_product.min_batch_size:
+            min_batch_mg = next_product.min_batch_size * 1000000
+            maco_mg = 0.00001 * min_batch_mg
+            return round(maco_mg, 2)
+        return 0
+    
+    @staticmethod
+    def method_tdd(previous_product: Product, next_product: Product, 
+                   safety_factor: float = 1000) -> float:
+        """
+        Section 4.2.3 - Therapeutic Macromolecules
+        MACO = (TDD Previous x MBS Next) / (SF x MDD Next)
+        SF = 1000 (1/1000th of therapeutic dose)
+        """
+        if previous_product and next_product:
+            tdd_previous = previous_product.max_dose
+            min_batch_next_mg = next_product.min_batch_size * 1000000
+            mdd_next = next_product.max_dose
+            
+            if mdd_next and mdd_next > 0:
+                maco_mg = (tdd_previous * min_batch_next_mg) / (safety_factor * mdd_next)
+                return round(maco_mg, 2)
+        return 0
+    
+    @staticmethod
+    def method_ade_pde(previous_product: Product, next_product: Product,
+                       purging_factor: float = 1.0, safety_factor: float = 1.0) -> float:
+        """
+        Section 4.2.1 - Health-Based Data (HBEL/ADE/PDE)
+        MACO = (ADE/PDE Prev x MBS Next x PF) / (MDD Next x SF)
+        
+        PF (Purging Factor): ability to reduce contaminant in downstream steps
+        SF (Safety Factor): interaction between previous and next product
+        """
+        if previous_product and next_product:
+            ade_pde_mg = previous_product.ade_pde / 1000  # Convert µg to mg
+            min_batch_next_mg = next_product.min_batch_size * 1000000
+            mdd_next = next_product.max_dose
+            
+            if mdd_next and mdd_next > 0:
+                maco_mg = (ade_pde_mg * min_batch_next_mg * purging_factor) / (mdd_next * safety_factor)
+                return round(maco_mg, 2)
+        return 0
+    
+    @staticmethod
+    def method_ttc(compound_category: str, min_batch_size_kg: float) -> float:
+        """
+        Section 4.2.1.3 - Threshold of Toxicological Concern (TTC)
+        
+        Categories:
+        - carcinogenic: 1 µg/day
+        - potent/highly toxic: 10 µg/day
+        - standard: 100 µg/day
+        """
+        ttc_values = {
+            "carcinogenic": 0.001,  # mg/day
+            "potent": 0.010,        # mg/day
+            "standard": 0.100       # mg/day
+        }
+        
+        ttc_mg = ttc_values.get(compound_category, 0.100)
+        min_batch_mg = min_batch_size_kg * 1000000
+        
+        # MACO = TTC × MBS
+        maco_mg = ttc_mg * min_batch_mg
+        return round(maco_mg, 2)
+    
+    @staticmethod
+    def calculate_all(previous_product: Product, next_product: Product,
+                      purging_factor: float = 1.0, safety_factor: float = 1.0) -> dict:
+        """Calculate all methods and return lowest MACO"""
+        result_10ppm = MACOService.method_10ppm(next_product)
+        result_tdd = MACOService.method_tdd(previous_product, next_product)
+        result_ade_pde = MACOService.method_ade_pde(previous_product, next_product, purging_factor, safety_factor)
+        
+        # TTC for chemicals without toxicology data
+        result_ttc = MACOService.method_ttc("standard", next_product.min_batch_size)
+        
+        valid_results = [r for r in [result_10ppm, result_tdd, result_ade_pde, result_ttc] if r > 0]
+        lowest = min(valid_results) if valid_results else 0
+        
+        return {
+            "method_10ppm": result_10ppm,
+            "method_tdd": result_tdd,
+            "method_ade_pde": result_ade_pde,
+            "method_ttc": result_ttc,
+            "lowest_maco": lowest,
+            "purging_factor_used": purging_factor,
+            "safety_factor_used": safety_factor
+        }

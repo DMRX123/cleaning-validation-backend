@@ -1,0 +1,53 @@
+{
+    "levels": {
+        "LEVEL_0": {
+            "name": "Level 0 - Visual Only",
+            "risk_level": "Low",
+            "requires_visual_inspection": true,
+            "requires_analytical_testing": false,
+            "requires_microbiological_testing": false,
+            "requires_validation": false,
+            "verification_frequency": null,
+            "max_residue_ppm": null,
+            "description": "Only gross cleaning required. Carryover not critical.",
+            "applicable_scenarios": [
+                "Same synthetic chain - immediate next step",
+                "Earlier steps with further purification"
+            ]
+        },
+        "LEVEL_1": {
+            "name": "Level 1 - Visual + Analytical",
+            "risk_level": "Medium",
+            "requires_visual_inspection": true,
+            "requires_analytical_testing": true,
+            "requires_microbiological_testing": false,
+            "requires_validation": true,
+            "verification_frequency": "Periodic (quarterly)",
+            "max_residue_ppm": 100,
+            "description": "Carryover of previous product is less critical.",
+            "applicable_scenarios": [
+                "Different synthetic chain - early steps",
+                "Same chain but not immediate",
+                "Campaign changes"
+            ]
+        },
+        "LEVEL_2": {
+            "name": "Level 2 - Full Validation",
+            "risk_level": "High",
+            "requires_visual_inspection": true,
+            "requires_analytical_testing": true,
+            "requires_microbiological_testing": true,
+            "requires_validation": true,
+            "verification_frequency": "Every batch",
+            "max_residue_ppm": 10,
+            "description": "Carryover of previous product is critical.",
+            "applicable_scenarios": [
+                "Different product lines",
+                "Final API steps",
+                "Toxic/highly potent compounds",
+                "Parenteral products"
+            ]
+        }
+    },
+    "reference": "APIC Cleaning Validation Guide Section 5.0"
+}

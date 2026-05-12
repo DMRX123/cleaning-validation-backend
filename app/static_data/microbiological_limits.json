@@ -1,0 +1,41 @@
+{
+    "limits_by_product_type": {
+        "oral": {
+            "total_germ_count_cfu": 100,
+            "yeast_mold_cfu": 50,
+            "endotoxin_eu_per_ml": null,
+            "sampling_method": "swab",
+            "reference": "EP 2.6.12"
+        },
+        "parenteral": {
+            "total_germ_count_cfu": 10,
+            "yeast_mold_cfu": 5,
+            "endotoxin_eu_per_ml": 0.25,
+            "sampling_method": "rinse",
+            "reference": "EP 2.6.14"
+        },
+        "topical": {
+            "total_germ_count_cfu": 100,
+            "yeast_mold_cfu": 50,
+            "endotoxin_eu_per_ml": null,
+            "sampling_method": "contact plate",
+            "reference": "EP 2.6.12"
+        },
+        "biotech": {
+            "total_germ_count_cfu": 10,
+            "yeast_mold_cfu": 5,
+            "endotoxin_eu_per_ml": 0.25,
+            "sampling_method": "swab",
+            "reference": "PDA TR No. 29"
+        },
+        "inhalation": {
+            "total_germ_count_cfu": 10,
+            "yeast_mold_cfu": 5,
+            "endotoxin_eu_per_ml": 0.25,
+            "sampling_method": "rinse",
+            "reference": "Ph.Eur. 2.6.12"
+        }
+    },
+    "reference": "APIC Cleaning Validation Guide Section 8.1 - EMA 158/01",
+    "note": "Values are in CFU/dm² for surface samples"
+}

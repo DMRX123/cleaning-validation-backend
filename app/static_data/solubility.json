@@ -1,0 +1,25 @@
+{
+    "solubility": [
+        "Very Soluble",
+        "Freely Soluble",
+        "Soluble",
+        "Sparingly Soluble",
+        "Slightly Soluble",
+        "Very Slightly Soluble",
+        "Practically Insoluble",
+        "Insoluble"
+    ],
+    "weights": {
+        "Very Soluble": 1,
+        "Freely Soluble": 1,
+        "Soluble": 2,
+        "Sparingly Soluble": 2,
+        "Slightly Soluble": 3,
+        "Very Slightly Soluble": 3,
+        "Practically Insoluble": 3,
+        "Insoluble": 3
+    },
+    "description": "Solubility classification based on USP criteria",
+    "reference": "APIC Cleaning Validation Guide Section 7.4(b)",
+    "usp_reference": "USP 24 - Reference Tables (Description and Solubility, 2254)"
+}

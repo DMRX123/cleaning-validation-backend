@@ -1,0 +1,78 @@
+{
+    "default_hold_times_hours": {
+        "reactor": {
+            "dht": 24,
+            "cht": 72,
+            "dht_max": 48,
+            "cht_max": 168
+        },
+        "dryer": {
+            "dht": 12,
+            "cht": 168,
+            "dht_max": 24,
+            "cht_max": 336
+        },
+        "mill": {
+            "dht": 8,
+            "cht": 168,
+            "dht_max": 16,
+            "cht_max": 336
+        },
+        "blender": {
+            "dht": 8,
+            "cht": 168,
+            "dht_max": 16,
+            "cht_max": 336
+        },
+        "filler": {
+            "dht": 4,
+            "cht": 24,
+            "dht_max": 8,
+            "cht_max": 72
+        },
+        "centrifuge": {
+            "dht": 12,
+            "cht": 72,
+            "dht_max": 24,
+            "cht_max": 168
+        },
+        "filter": {
+            "dht": 8,
+            "cht": 48,
+            "dht_max": 16,
+            "cht_max": 120
+        },
+        "tank": {
+            "dht": 48,
+            "cht": 168,
+            "dht_max": 96,
+            "cht_max": 336
+        },
+        "coater": {
+            "dht": 8,
+            "cht": 72,
+            "dht_max": 16,
+            "cht_max": 168
+        },
+        "granulator": {
+            "dht": 12,
+            "cht": 72,
+            "dht_max": 24,
+            "cht_max": 168
+        },
+        "sifter": {
+            "dht": 8,
+            "cht": 168,
+            "dht_max": 16,
+            "cht_max": 336
+        },
+        "packaging": {
+            "dht": 4,
+            "cht": 24,
+            "dht_max": 8,
+            "cht_max": 72
+        }
+    },
+    "reference": "APIC Cleaning Validation Guide Section 9.7",
+    "note": "DHT = Dirty Hold Time, CHT = Clean Hold Time"
+}

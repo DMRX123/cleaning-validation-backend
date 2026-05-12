@@ -1,0 +1,35 @@
+{
+    "solubility_weights": {
+        "Very Soluble": 1,
+        "Freely Soluble": 1,
+        "Soluble": 2,
+        "Sparingly Soluble": 2,
+        "Slightly Soluble": 3,
+        "Very Slightly Soluble": 3,
+        "Practically Insoluble": 3,
+        "Insoluble": 3
+    },
+    "difficulty_weights": {
+        "Very Easy": 1,
+        "Easy": 1,
+        "Medium": 2,
+        "Difficult": 3,
+        "Very Difficult": 3
+    },
+    "toxicity_weights": {
+        "ade_pde_gt_500": 1,
+        "ade_pde_100_to_500": 2,
+        "ade_pde_10_to_99": 3,
+        "ade_pde_1_to_9": 4,
+        "ade_pde_lt_1": 5
+    },
+    "dose_weights": {
+        "min_dose_gt_1000": 1,
+        "min_dose_100_to_1000": 2,
+        "min_dose_10_to_99": 3,
+        "min_dose_1_to_9": 4,
+        "min_dose_lt_1": 5
+    },
+    "reference": "APIC Cleaning Validation Guide Section 7.4",
+    "note": "Higher weight = worse case for cleaning validation"
+}

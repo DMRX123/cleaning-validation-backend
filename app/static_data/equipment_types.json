@@ -1,0 +1,150 @@
+{
+    "equipment_types": [
+        {
+            "name": "Sifter",
+            "category": "Sizing",
+            "typical_surface_area_m2": 4,
+            "cleaning_method": "Manual/Manual with solvent",
+            "hard_to_clean_locations": [
+                "Mesh area",
+                "Outlet chute"
+            ]
+        },
+        {
+            "name": "Granulator",
+            "category": "Wet Granulation",
+            "typical_surface_area_m2": 12,
+            "cleaning_method": "CIP/Manual",
+            "hard_to_clean_locations": [
+                "Impeller blades",
+                "Bottom discharge"
+            ]
+        },
+        {
+            "name": "Dryer",
+            "category": "Drying",
+            "typical_surface_area_m2": 10,
+            "cleaning_method": "CIP/Manual",
+            "hard_to_clean_locations": [
+                "Tray corners",
+                "Air inlet",
+                "Outlet filter"
+            ]
+        },
+        {
+            "name": "Blender/Lubricator",
+            "category": "Blending",
+            "typical_surface_area_m2": 8,
+            "cleaning_method": "Manual with solvent",
+            "hard_to_clean_locations": [
+                "Blades",
+                "Bottom cone",
+                "Discharge valve"
+            ]
+        },
+        {
+            "name": "Compression",
+            "category": "Tabletting",
+            "typical_surface_area_m2": 4,
+            "cleaning_method": "Manual/ Vacuum",
+            "hard_to_clean_locations": [
+                "Dies",
+                "Punches",
+                "Feed frame",
+                "Chute"
+            ]
+        },
+        {
+            "name": "Coater",
+            "category": "Coating",
+            "typical_surface_area_m2": 8,
+            "cleaning_method": "CIP/Manual",
+            "hard_to_clean_locations": [
+                "Spray guns",
+                "Pan baffles",
+                "Air inlet"
+            ]
+        },
+        {
+            "name": "Packaging",
+            "category": "Packaging",
+            "typical_surface_area_m2": 4,
+            "cleaning_method": "Manual/ Vacuum",
+            "hard_to_clean_locations": [
+                "Hopper",
+                "Filling nozzles",
+                "Change parts"
+            ]
+        },
+        {
+            "name": "Sampler",
+            "category": "Sampling",
+            "typical_surface_area_m2": 1,
+            "cleaning_method": "Manual",
+            "hard_to_clean_locations": [
+                "Thief sampler",
+                "Transfer lines"
+            ]
+        },
+        {
+            "name": "Reactor",
+            "category": "Chemical Synthesis",
+            "typical_surface_area_m2": 25,
+            "cleaning_method": "CIP/ Reflux",
+            "hard_to_clean_locations": [
+                "Agitator blades",
+                "Baffles",
+                "Bottom valve",
+                "Condenser"
+            ]
+        },
+        {
+            "name": "Centrifuge",
+            "category": "Separation",
+            "typical_surface_area_m2": 6,
+            "cleaning_method": "CIP/Manual",
+            "hard_to_clean_locations": [
+                "Basket",
+                "Plow blades",
+                "Casing"
+            ]
+        },
+        {
+            "name": "Filter",
+            "category": "Filtration",
+            "typical_surface_area_m2": 5,
+            "cleaning_method": "Manual with solvent",
+            "hard_to_clean_locations": [
+                "Filter cloth",
+                "Bottom outlet",
+                "Housing"
+            ]
+        },
+        {
+            "name": "Tank",
+            "category": "Storage",
+            "typical_surface_area_m2": 30,
+            "cleaning_method": "CIP/Spray ball",
+            "hard_to_clean_locations": [
+                "Top head",
+                "Baffles",
+                "Bottom sump",
+                "Dip tube"
+            ]
+        },
+        {
+            "name": "Mill",
+            "category": "Milling",
+            "typical_surface_area_m2": 3,
+            "cleaning_method": "Manual/ Vacuum",
+            "hard_to_clean_locations": [
+                "Rotor",
+                "Stator",
+                "Screen",
+                "Outlet"
+            ]
+        }
+    ],
+    "reference": "APIC Cleaning Validation Guide Section 7.2",
+    "note": "Surface areas are typical values - actual values may vary by manufacturer"
+}

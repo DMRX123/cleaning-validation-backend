@@ -1,0 +1,39 @@
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+from ..database import Base
+
+class ValidationSession(Base):
+    __tablename__ = "validation_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_code = Column(String, unique=True, nullable=False)
+    status = Column(String, default="DRAFT")
+    extra_area_percentage = Column(Float, default=0)
+    total_surface_area = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    previous_product_id = Column(Integer, ForeignKey("products.id"))
+    next_product_id = Column(Integer, ForeignKey("products.id"))
+    
+    previous_product = relationship("Product", foreign_keys=[previous_product_id], overlaps="sessions_as_previous,sessions_as_next")
+    next_product = relationship("Product", foreign_keys=[next_product_id], overlaps="sessions_as_previous,sessions_as_next")
+    
+    maco_10ppm = Column(Float, nullable=True)
+    maco_tdd = Column(Float, nullable=True)
+    maco_ade_pde = Column(Float, nullable=True)
+    lowest_maco = Column(Float, nullable=True)
+    
+    swab_limit_mg = Column(Float, nullable=True)
+    swab_limit_ppm = Column(Float, nullable=True)
+    
+    rinse_limit_mg = Column(Float, nullable=True)
+    rinse_limit_ppm = Column(Float, nullable=True)
+    rinse_volume_loq = Column(Float, nullable=True)
+    rinse_volume_10ppm = Column(Float, nullable=True)
+    
+    standard_prep = relationship("StandardPrep", back_populates="session", uselist=False)
+    swab_results = relationship("SwabResult", back_populates="session")
+    rinse_results = relationship("RinseResult", back_populates="session")
+    session_equipment = relationship("SessionEquipment", back_populates="session")

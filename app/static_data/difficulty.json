@@ -1,0 +1,18 @@
+{
+    "cleaning_difficulty": [
+        "Very Easy",
+        "Easy",
+        "Medium",
+        "Difficult",
+        "Very Difficult"
+    ],
+    "weights": {
+        "Very Easy": 1,
+        "Easy": 1,
+        "Medium": 2,
+        "Difficult": 3,
+        "Very Difficult": 3
+    },
+    "description": "Cleaning difficulty rating based on production experience",
+    "reference": "APIC Cleaning Validation Guide Section 7.4(a)"
+}

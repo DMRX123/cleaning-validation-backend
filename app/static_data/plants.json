@@ -1,0 +1,10 @@
+{
+    "plants": [
+        "Plant-1",
+        "Plant-2",
+        "Plant-3",
+        "Plant-4"
+    ],
+    "description": "Manufacturing plants/blocks for API production",
+    "reference": "APIC Cleaning Validation Guide Section 7.2"
+}
