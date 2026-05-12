@@ -3,8 +3,10 @@ __pycache__/
 *.py[cod]
 *.so
 .Python
-*.pyc
-*.pyo
+*.egg
+*.egg-info/
+dist/
+build/
 
 # Virtual Environment
 venv/
@@ -12,20 +14,19 @@ env/
 ENV/
 .venv/
 
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
 # Database
 *.db
 *.sqlite
 *.sqlite3
 
-# Environment files
-.env
-.env.local
-.env.production
-
 # Logs
-logs/*.log
-*.log
 logs/
+*.log
 
 # IDE
 .vscode/
@@ -33,35 +34,15 @@ logs/
 *.swp
 *.swo
 *~
-.DS_Store
 
 # OS
-Thumbs.db
 .DS_Store
-
-# Uploads
-uploads/
-temp/
-media/
+Thumbs.db
 
 # Alembic
 alembic/versions/*.pyc
-alembic/__pycache__/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Docker
-*.pid
 
 # Secrets
 *.key
 *.pem
 *.cert
-
-# Reports
-reports/*.pdf
-reports/*.html
