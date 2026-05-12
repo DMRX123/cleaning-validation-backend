@@ -3,16 +3,19 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text  # ✅ ADDED - Fix for health check
+from sqlalchemy import text
 from datetime import datetime
 import logging
 import os
+import subprocess
+import sys
 
 from .api import (
     auth, products, equipment, calculations, validation, 
     reports, static_data, dashboard, cleaning_validation, protocols
 )
 from .database import init_db, get_db
+from .config import config
 
 # Setup logging
 logging.basicConfig(
@@ -100,16 +103,80 @@ app.add_middleware(
     max_age=3600,
 )
 
+# ==================== AUTO DATABASE SETUP FUNCTION ====================
+
+def setup_database_on_startup():
+    """Auto-create tables, seed data, and create admin user on first startup"""
+    try:
+        from app.database import SessionLocal
+        from app.services.auth import AuthService
+        from app.models.user import User
+        from app.models.cleaning_level import CleaningLevel
+        
+        db = SessionLocal()
+        
+        # Check if tables are empty and setup needed
+        try:
+            # Check if users table has any data
+            user_count = db.query(User).count()
+            
+            if user_count == 0:
+                logger.info("📦 Database is empty. Running initial setup...")
+                
+                # Create admin user
+                admin = User(
+                    username='admin',
+                    email='admin@cleaning-validation.com',
+                    hashed_password=AuthService.get_password_hash('Admin@123'),
+                    is_active=True,
+                    is_admin=True
+                )
+                db.add(admin)
+                db.commit()
+                logger.info("✅ Admin user created: admin / Admin@123")
+                
+                # Run seed script for static data
+                try:
+                    seed_script = os.path.join(os.path.dirname(__file__), "..", "scripts", "seed_static_data.py")
+                    if os.path.exists(seed_script):
+                        result = subprocess.run(
+                            [sys.executable, seed_script], 
+                            capture_output=True, 
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            logger.info("✅ Static data seeded successfully")
+                        else:
+                            logger.warning(f"⚠️ Seed warning: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not run seed script: {e}")
+            else:
+                logger.info(f"✅ Database already has {user_count} users. Skipping setup.")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Setup check warning: {e}")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"❌ Auto-setup error: {e}")
+
 # ==================== LIFESPAN EVENTS ====================
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting up Cleaning Validation API...")
     try:
+        # Initialize database (creates tables if not exist)
         init_db()
-        logger.info("Database initialized successfully")
+        logger.info("✅ Database tables ready")
+        
+        # Run auto setup for data
+        setup_database_on_startup()
+        
+        logger.info("🚀 Cleaning Validation API is ready!")
     except Exception as e:
-        logger.error(f"Database initialization failed: {str(e)}")
+        logger.error(f"❌ Database initialization failed: {str(e)}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -122,7 +189,6 @@ def health_check(db: Session = Depends(get_db)):
     """Health check endpoint with database status"""
     db_status = "healthy"
     try:
-        # ✅ FIXED: Using text() for SQL expression
         db.execute(text("SELECT 1"))
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
