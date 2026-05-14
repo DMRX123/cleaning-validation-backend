@@ -1,4 +1,4 @@
-# app/api/dashboard.py - COMPLETE FIXED WITH TRENDS
+# app/api/dashboard.py - COMPLETE FIXED VERSION
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -28,8 +28,9 @@ def get_stats(db: Session = Depends(get_db)):
     
     # Calculate trends (compare with previous month)
     one_month_ago = datetime.now() - timedelta(days=30)
+    
     products_last_month = db.query(Product).filter(Product.created_at >= one_month_ago).count()
-    equipment_last_month = db.query(Equipment).filter(Equipment.created_at >= one_month_ago).count()
+    equipment_last_month = db.query(Equipment).filter(Equipment.created_at >= one_month_ago).count() if hasattr(Equipment, 'created_at') else 0
     sessions_last_month = db.query(ValidationSession).filter(
         ValidationSession.created_at >= one_month_ago
     ).count()

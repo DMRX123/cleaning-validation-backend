@@ -1,5 +1,6 @@
-# app/models/product.py - COMPLETE FIXED VERSION
-from sqlalchemy import Column, Integer, String, Float
+# app/models/product.py - COMPLETE FIXED VERSION with created_at
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
 
@@ -21,6 +22,10 @@ class Product(Base):
     solubility = Column(String, nullable=False)
     hardest_to_clean = Column(String, nullable=False)
     plant = Column(String, nullable=False)
+    
+    # Timestamp columns
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Simple relationships without back_populates to avoid circular imports
     sessions_as_previous = relationship(
