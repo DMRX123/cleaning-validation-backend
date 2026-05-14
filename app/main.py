@@ -57,12 +57,27 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# CORS Middleware
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000").split(",")
+# ==================== CORS MIDDLEWARE (FIXED FOR PRODUCTION) ====================
+# Get allowed origins from environment variable or use defaults including Vercel
+CORS_ORIGINS = os.getenv(
+    "CORS_ORIGINS", 
+    "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,https://cleaning-validation-frontend.vercel.app"
+).split(",")
+
+# Also add the frontend production URL explicitly
+ALLOWED_ORIGINS = CORS_ORIGINS + [
+    "https://cleaning-validation-frontend.vercel.app",
+    "https://cleaning-validation-frontend.vercel.app/*",
+]
+
+# Remove duplicates while preserving order
+ALLOWED_ORIGINS = list(dict.fromkeys(ALLOWED_ORIGINS))
+
+logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=ALLOWED_ORIGINS,  # Allow specific origins including Vercel
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
@@ -203,6 +218,7 @@ async def startup_event():
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
         logger.info("📊 Total Endpoints: 61")
         logger.info("🔢 Total Calculations: 31")
+        logger.info(f"🌐 CORS enabled for: {ALLOWED_ORIGINS}")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
 
@@ -225,7 +241,9 @@ def health_check(db: Session = Depends(get_db)):
         "status": "healthy" if db_status == "healthy" else "degraded",
         "version": "2.0.0",
         "database": db_status,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "cors_enabled": True,
+        "allowed_origins": ALLOWED_ORIGINS
     }
 
 @app.get("/")
@@ -317,5 +335,11 @@ def api_info():
             "total_calculations": 31,
             "total_models": 28,
             "apic_sections_covered": "30/30 (100%)"
+        },
+        "cors_configuration": {
+            "allowed_origins": ALLOWED_ORIGINS,
+            "allow_credentials": True,
+            "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+            "allow_headers": ["*"]
         }
     }
