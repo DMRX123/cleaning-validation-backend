@@ -35,23 +35,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
-
-# Get CORS origins from environment variable or use defaults
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://cleaning-validation-frontend.vercel.app,https://cleaning-validation.vercel.app").split(",")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
-)
-
-logger.info(f"CORS enabled for origins: {CORS_ORIGINS}")
-
 # ==================== EXCEPTION HANDLERS ====================
 
 @app.exception_handler(HTTPException)
@@ -90,8 +73,9 @@ async def general_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# ==================== REQUEST LOGGING MIDDLEWARE ====================
+# ==================== MIDDLEWARE ====================
 
+# Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
@@ -107,6 +91,19 @@ async def log_requests(request: Request, call_next):
     
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+# CORS Middleware
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
+)
 
 # ==================== AUTO DATABASE SETUP FUNCTION ====================
 
