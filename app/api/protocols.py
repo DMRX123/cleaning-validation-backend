@@ -13,7 +13,6 @@ import io
 
 router = APIRouter(prefix="/protocols", tags=["Protocols"])
 
-# Request Models
 class CreateProtocolRequest(BaseModel):
     equipment_id: int
     previous_product_id: int
@@ -32,8 +31,6 @@ class ExecuteProtocolRequest(BaseModel):
 
 @router.post("/create")
 def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db)):
-    """Section 9.0 - Create validation protocol"""
-    # Verify equipment and products exist
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
@@ -61,7 +58,6 @@ def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db
 
 @router.get("/{protocol_id}")
 def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
-    """Get protocol by ID"""
     protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
@@ -69,7 +65,6 @@ def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{protocol_id}/pdf")
 def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
-    """Download protocol as PDF"""
     from reportlab.lib.pagesizes import A4
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -84,21 +79,18 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
     styles = getSampleStyleSheet()
     
-    # Custom styles
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=30, textColor=colors.HexColor('#1a472a'))
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=12, spaceAfter=12, textColor=colors.HexColor('#2d6a4f'))
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10)
     
     story = []
     
-    # Title
     story.append(Paragraph(f"Cleaning Validation Protocol", title_style))
     story.append(Paragraph(f"Protocol Number: {protocol.protocol_number}", normal_style))
     story.append(Paragraph(f"Version: {protocol.version}", normal_style))
     story.append(Paragraph(f"Status: {protocol.status}", normal_style))
     story.append(Spacer(1, 20))
     
-    # Approval Table
     approval_data = [
         ["Prepared By:", protocol.prepared_by or "Not specified", "Date:", protocol.prepared_date.strftime('%Y-%m-%d') if protocol.prepared_date else "Not specified"],
         ["Reviewed By:", protocol.reviewed_by or "Pending", "Date:", protocol.reviewed_date.strftime('%Y-%m-%d') if protocol.reviewed_date else "Pending"],
@@ -113,22 +105,18 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     story.append(approval_table)
     story.append(Spacer(1, 20))
     
-    # 1. Background
     story.append(Paragraph("1.0 BACKGROUND", heading_style))
     story.append(Paragraph(protocol.background or "Not specified", normal_style))
     story.append(Spacer(1, 12))
     
-    # 2. Purpose
     story.append(Paragraph("2.0 PURPOSE", heading_style))
     story.append(Paragraph(protocol.purpose or "Not specified", normal_style))
     story.append(Spacer(1, 12))
     
-    # 3. Scope
     story.append(Paragraph("3.0 SCOPE", heading_style))
     story.append(Paragraph(protocol.scope or "Not specified", normal_style))
     story.append(Spacer(1, 12))
     
-    # 4. Equipment Information
     story.append(Paragraph("4.0 EQUIPMENT INFORMATION", heading_style))
     equipment_data = [
         ["Equipment ID", "Cleaning Procedure", "Visual Acceptance"],
@@ -145,7 +133,6 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     story.append(equipment_table)
     story.append(Spacer(1, 12))
     
-    # 5. Acceptance Criteria
     story.append(Paragraph("5.0 ACCEPTANCE CRITERIA", heading_style))
     criteria_data = [
         ["Parameter", "Acceptance Criteria"],
@@ -164,7 +151,6 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     story.append(criteria_table)
     story.append(Spacer(1, 12))
     
-    # 6. Hold Times
     story.append(Paragraph("6.0 HOLD TIMES", heading_style))
     hold_data = [
         ["Parameter", "Validated Time"],
@@ -192,14 +178,23 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
 
 @router.post("/execute")
 def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_db)):
-    """Section 9.0 - Execute protocol and record results"""
+    """Section 9.0 - Execute protocol and record results with full PASS/FAIL logic"""
     protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == request.protocol_id).first()
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
     
-    # Determine overall result
-    overall = "PASS" if (request.visual_result == "PASS" and 
-                         request.chemical_result_ppm <= (protocol.chemical_acceptance_ppm or 999999)) else "FAIL"
+    # Determine overall result - INCLUDES MICROBIOLOGICAL RESULT
+    chemical_pass = request.chemical_result_ppm <= (protocol.chemical_acceptance_ppm or 999999)
+    visual_pass = request.visual_result == "PASS"
+    
+    # Microbiological check
+    microbiological_pass = True
+    if protocol.microbiological_acceptance and request.microbiological_result is not None:
+        microbiological_pass = request.microbiological_result <= protocol.microbiological_acceptance
+    elif protocol.microbiological_acceptance and request.microbiological_result is None:
+        microbiological_pass = False  # Missing required microbiological result
+    
+    overall = "PASS" if (visual_pass and chemical_pass and microbiological_pass) else "FAIL"
     
     result = ProtocolExecutionResult(
         protocol_id=request.protocol_id,
@@ -215,7 +210,6 @@ def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_
     
     db.add(result)
     
-    # Check if all 3 replicates are done
     existing_results = db.query(ProtocolExecutionResult).filter(
         ProtocolExecutionResult.protocol_id == request.protocol_id
     ).count()
@@ -223,7 +217,6 @@ def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_
     if existing_results + 1 >= 3:
         protocol.status = "EXECUTED"
         
-        # Check if all passed
         all_results = db.query(ProtocolExecutionResult).filter(
             ProtocolExecutionResult.protocol_id == request.protocol_id
         ).all()
@@ -249,7 +242,6 @@ def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_
 
 @router.get("/{protocol_id}/results")
 def get_protocol_results(protocol_id: int, db: Session = Depends(get_db)):
-    """Get all execution results for a protocol"""
     protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")

@@ -26,6 +26,15 @@ from .limit_rationale_service import LimitRationaleService
 from .change_control_service import ChangeControlService
 from .protocol_service import ProtocolService
 
+# Advanced APIC Services
+from .ade_service import ADEService
+from .worst_case_service import WorstCaseService as AdvancedWorstCaseService
+from .guidance_service import GuidanceService
+
+# Section 6.0 - Cleaning Process Control Services
+from .cleaning_process_service import CleaningProcessService
+from .cleaning_capability_service import CleaningCapabilityService
+
 __all__ = [
     # Core Services
     "MACOService",
@@ -49,4 +58,13 @@ __all__ = [
     "LimitRationaleService",     # Section 4.2.6
     "ChangeControlService",      # Section 10.0
     "ProtocolService",           # Section 9.0
+    
+    # Advanced APIC Services
+    "ADEService",                # Section 4.2.1.1
+    "AdvancedWorstCaseService",  # Section 7.4 (4 criteria)
+    "GuidanceService",           # Section 10.0 (FAQ)
+    
+    # Section 6.0 - Cleaning Process Control
+    "CleaningProcessService",
+    "CleaningCapabilityService",
 ]

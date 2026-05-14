@@ -1,4 +1,3 @@
-# app/api/cleaning_validation.py - COMPLETE FIXED VERSION
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -15,6 +14,9 @@ from ..services.microbiological_service import MicrobiologicalService
 from ..services.bracketing_service import BracketingService
 from ..services.limit_rationale_service import LimitRationaleService
 from ..services.maco import MACOService
+from ..services.worst_case_service import WorstCaseService as NewWorstCaseService
+from ..services.ade_service import ADEService
+from ..schemas.ade import ADECalculationRequest, ADECalculationResponse
 
 router = APIRouter(prefix="/cleaning-validation", tags=["Cleaning Validation"])
 
@@ -49,7 +51,7 @@ class CleaningLevelRequest(BaseModel):
     same_synthetic_chain: bool = False
 
 # ============================================
-# CLEANING LEVEL ENDPOINTS (FIXED - removed duplicate prefix)
+# CLEANING LEVEL ENDPOINTS
 # ============================================
 
 @router.post("/determine-cleaning-level")
@@ -58,6 +60,7 @@ def determine_cleaning_level(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Section 5.0 - Determine cleaning level based on risk"""
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
     
@@ -85,6 +88,7 @@ def validate_dirty_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Section 9.7 - Validate Dirty Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -108,6 +112,7 @@ def validate_clean_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Section 9.7 - Validate Clean Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -135,6 +140,7 @@ def extend_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Extend validated hold time with justification"""
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -159,22 +165,27 @@ def calculate_maco_advanced(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Section 4.2.1 - Advanced MACO with PF, SF, and production type factor"""
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
     
     if not previous or not next_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
+    # Validate purging factor
+    if request.purging_factor < 0.1:
+        raise HTTPException(status_code=400, detail="purging_factor must be at least 0.1")
+    
     factor = LimitRationaleService.get_factor(request.production_type)
     
     result = MACOService.calculate_all(
         previous, next_product,
-        purging_factor=request.purging_factor * factor if factor else request.purging_factor,
+        purging_factor=request.purging_factor * factor,
         safety_factor=request.safety_factor
     )
     
     result["rationale"] = LimitRationaleService.get_rationale(request.production_type, [])
-    result["production_type_factor_applied"] = factor if factor else 1
+    result["production_type_factor_applied"] = factor
     
     return {
         "success": True,
@@ -191,6 +202,7 @@ def create_bracketing_matrix(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
+    """Section 7.5 - Create worst case rating matrix"""
     if not request.product_ids:
         raise HTTPException(status_code=400, detail="product_ids cannot be empty")
     
@@ -222,6 +234,7 @@ def get_microbiological_limits(
     product_type: str,
     current_user = Depends(get_current_user)
 ):
+    """Section 8.1 - Get microbiological limits by product type"""
     valid_types = ["oral", "parenteral", "topical", "biotech", "inhalation"]
     if product_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid product_type. Must be one of: {valid_types}")
@@ -247,6 +260,7 @@ def get_limit_rationale(
     has_purification: bool = False,
     current_user = Depends(get_current_user)
 ):
+    """Section 4.2.6 - Get scientific rationale for different limits"""
     valid_types = ["pharmaceutical", "api_chemical", "api_physical", "intermediate_early", "intermediate_late", "dedicated"]
     if production_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid production_type. Must be one of: {valid_types}")
@@ -268,6 +282,7 @@ def get_hold_time_defaults(
     equipment_type: str,
     current_user = Depends(get_current_user)
 ):
+    """Get default hold time limits for equipment type"""
     defaults = HoldTimeService.get_default_limits(equipment_type)
     
     return {
@@ -279,3 +294,65 @@ def get_hold_time_defaults(
         "max_clean_hold_time_hours": defaults.get("cht_max", defaults.get("cht", 72) * 2),
         "reference": "APIC Cleaning Validation Guide Section 9.7"
     }
+
+# ============================================
+# WORST CASE RATING ADVANCED ENDPOINT
+# ============================================
+
+@router.post("/worst-case-rating-advanced")
+def get_worst_case_rating_advanced(
+    product_ids: List[int],
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Section 7.4 - Complete worst case rating with 4 criteria:
+    - Hardest to clean (experience)
+    - Solubility in cleaning solvent
+    - ADE/PDE (toxicity)
+    - Therapeutic dose
+    """
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="product_ids cannot be empty")
+    
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    
+    if not products:
+        raise HTTPException(status_code=404, detail="No products found")
+    
+    ranking = NewWorstCaseService.get_worst_case_ranking(products)
+    worst_case = NewWorstCaseService.select_worst_case(products)
+    
+    # Get detailed explanations
+    explanations = {}
+    for product in products:
+        explanations[product.name] = NewWorstCaseService.get_rating_explanation(product)
+    
+    return {
+        "success": True,
+        "ranking": ranking,
+        "worst_case_product": {
+            "id": worst_case.id,
+            "name": worst_case.name
+        } if worst_case else None,
+        "explanations": explanations,
+        "recommendation": f"Select {worst_case.name} as the worst case for validation" if worst_case else "No products to validate",
+        "reference": "APIC Cleaning Validation Guide Section 7.4"
+    }
+
+# ============================================
+# ADE CALCULATION ENDPOINT
+# ============================================
+
+@router.post("/calculate-ade", response_model=ADECalculationResponse)
+def calculate_ade(
+    request: ADECalculationRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Section 4.2.1.1 - Calculate ADE/PDE from toxicology data
+    Supports NOAEL, LOAEL, LD50, and TTC methods
+    """
+    result = ADEService.calculate_and_save(db, request)
+    return result

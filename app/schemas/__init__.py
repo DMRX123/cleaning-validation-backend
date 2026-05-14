@@ -16,6 +16,14 @@ from .protocol import (
     ProtocolCreate, ProtocolUpdate, ProtocolResponse,
     ProtocolExecutionCreate, ProtocolExecutionResponse
 )
+from .ade import ADECalculationRequest, ADECalculationResponse
+from .guidance import GuidanceQuestionResponse, RevalidationCheckRequest, RevalidationCheckResponse
+from .cleaning_process import (
+    CleaningProcessCreate, CleaningProcessResponse,
+    CleaningParameterCreate, CleaningExecutionCreate,
+    CleaningCapabilityRequest, CleaningCapabilityResponse,
+    CleaningTypeEnum, CleaningStep, CleaningAgent
+)
 
 __all__ = [
     # Product Schemas
@@ -48,4 +56,24 @@ __all__ = [
     "ProtocolResponse",
     "ProtocolExecutionCreate",
     "ProtocolExecutionResponse",
+    
+    # ADE Calculation Schemas (Section 4.2.1.1)
+    "ADECalculationRequest",
+    "ADECalculationResponse",
+    
+    # Guidance Schemas (Section 10.0)
+    "GuidanceQuestionResponse",
+    "RevalidationCheckRequest",
+    "RevalidationCheckResponse",
+    
+    # Cleaning Process Schemas (Section 6.0)
+    "CleaningProcessCreate",
+    "CleaningProcessResponse",
+    "CleaningParameterCreate",
+    "CleaningExecutionCreate",
+    "CleaningCapabilityRequest",
+    "CleaningCapabilityResponse",
+    "CleaningTypeEnum",
+    "CleaningStep",
+    "CleaningAgent",
 ]

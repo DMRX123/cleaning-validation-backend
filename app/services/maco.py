@@ -7,10 +7,6 @@ class MACOService:
     
     @staticmethod
     def method_10ppm(next_product: Product) -> float:
-        """
-        Section 4.2.2 - General Limit (10 ppm)
-        MACO = 0.00001 x Min Batch Next (mg)
-        """
         if next_product and next_product.min_batch_size:
             min_batch_mg = next_product.min_batch_size * 1000000
             maco_mg = 0.00001 * min_batch_mg
@@ -20,11 +16,6 @@ class MACOService:
     @staticmethod
     def method_tdd(previous_product: Product, next_product: Product, 
                    safety_factor: float = 1000) -> float:
-        """
-        Section 4.2.3 - Therapeutic Macromolecules
-        MACO = (TDD Previous x MBS Next) / (SF x MDD Next)
-        SF = 1000 (1/1000th of therapeutic dose)
-        """
         if previous_product and next_product:
             tdd_previous = previous_product.max_dose
             min_batch_next_mg = next_product.min_batch_size * 1000000
@@ -40,13 +31,14 @@ class MACOService:
                        purging_factor: float = 1.0, safety_factor: float = 1.0) -> float:
         """
         Section 4.2.1 - Health-Based Data (HBEL/ADE/PDE)
-        MACO = (ADE/PDE Prev x MBS Next x PF) / (MDD Next x SF)
-        
-        PF (Purging Factor): ability to reduce contaminant in downstream steps
-        SF (Safety Factor): interaction between previous and next product
+        purging_factor must be >= 0.1 (cannot be zero)
         """
+        # Validate purging factor
+        if purging_factor <= 0:
+            purging_factor = 1.0  # Default safe value
+        
         if previous_product and next_product:
-            ade_pde_mg = previous_product.ade_pde / 1000  # Convert µg to mg
+            ade_pde_mg = previous_product.ade_pde / 1000
             min_batch_next_mg = next_product.min_batch_size * 1000000
             mdd_next = next_product.max_dose
             
@@ -57,24 +49,14 @@ class MACOService:
     
     @staticmethod
     def method_ttc(compound_category: str, min_batch_size_kg: float) -> float:
-        """
-        Section 4.2.1.3 - Threshold of Toxicological Concern (TTC)
-        
-        Categories:
-        - carcinogenic: 1 µg/day
-        - potent/highly toxic: 10 µg/day
-        - standard: 100 µg/day
-        """
         ttc_values = {
-            "carcinogenic": 0.001,  # mg/day
-            "potent": 0.010,        # mg/day
-            "standard": 0.100       # mg/day
+            "carcinogenic": 0.001,
+            "potent": 0.010,
+            "standard": 0.100
         }
         
         ttc_mg = ttc_values.get(compound_category, 0.100)
         min_batch_mg = min_batch_size_kg * 1000000
-        
-        # MACO = TTC × MBS
         maco_mg = ttc_mg * min_batch_mg
         return round(maco_mg, 2)
     
@@ -82,11 +64,13 @@ class MACOService:
     def calculate_all(previous_product: Product, next_product: Product,
                       purging_factor: float = 1.0, safety_factor: float = 1.0) -> dict:
         """Calculate all methods and return lowest MACO"""
+        # Ensure purging_factor is valid (not zero or negative)
+        if purging_factor <= 0:
+            purging_factor = 1.0
+        
         result_10ppm = MACOService.method_10ppm(next_product)
         result_tdd = MACOService.method_tdd(previous_product, next_product)
         result_ade_pde = MACOService.method_ade_pde(previous_product, next_product, purging_factor, safety_factor)
-        
-        # TTC for chemicals without toxicology data
         result_ttc = MACOService.method_ttc("standard", next_product.min_batch_size)
         
         valid_results = [r for r in [result_10ppm, result_tdd, result_ade_pde, result_ttc] if r > 0]

@@ -11,19 +11,27 @@ class Config:
     # Database Configuration
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     
-    # Debug: Print what we got (REMOVE AFTER DEBUGGING)
     logger.info(f"🔍 DATABASE_URL from os.getenv: {DATABASE_URL[:50] if DATABASE_URL else 'EMPTY!'}...")
     
     if not DATABASE_URL:
         logger.error("❌ DATABASE_URL is EMPTY! Check Render environment variables.")
     
-    # Security Configuration
-    SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-change-this-in-production-minimum-32-characters")
+    # Security Configuration - MANDATORY in production
+    SECRET_KEY = os.getenv("SECRET_KEY", "")
     ALGORITHM = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     
-    # Environment Configuration
+    # Production security check
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    if ENVIRONMENT == "production" and not SECRET_KEY:
+        raise ValueError("❌ SECRET_KEY environment variable is REQUIRED in production!")
+    
+    # Fallback for development only
+    if not SECRET_KEY and ENVIRONMENT != "production":
+        SECRET_KEY = "dev-secret-key-do-not-use-in-production"
+        logger.warning("⚠️ Using development SECRET_KEY. DO NOT use in production!")
+    
+    # Environment Configuration
     DEBUG = os.getenv("DEBUG", "True").lower() == "true"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     

@@ -107,3 +107,49 @@ class CleaningLevelService:
         
         scenario_key = f"{scenario.get('chain_type', 'different')}_{scenario.get('step_type', 'final')}"
         return scenarios.get(scenario_key, scenarios["different_chain_final_api"])
+    
+    @staticmethod
+    def get_verification_requirements(level: CleaningLevelEnum, product_type: str = "api") -> dict:
+        """
+        Section 5.3 - Cleaning Verification vs Validation requirements per level
+        """
+        base_requirements = {
+            CleaningLevelEnum.LEVEL_0: {
+                "visual_inspection_required": True,
+                "analytical_testing_required": False,
+                "microbiological_testing_required": False,
+                "validation_required": False,
+                "verification_frequency": None,
+                "max_residue_ppm": None,
+                "can_release_without_testing": True,
+                "description": "Visual inspection only - no analytical testing needed"
+            },
+            CleaningLevelEnum.LEVEL_1: {
+                "visual_inspection_required": True,
+                "analytical_testing_required": True,
+                "microbiological_testing_required": False,
+                "validation_required": True,
+                "verification_frequency": "Periodic (quarterly)",
+                "max_residue_ppm": 100,
+                "can_release_without_testing": False,
+                "description": "Visual + analytical testing required"
+            },
+            CleaningLevelEnum.LEVEL_2: {
+                "visual_inspection_required": True,
+                "analytical_testing_required": True,
+                "microbiological_testing_required": True,
+                "validation_required": True,
+                "verification_frequency": "Every batch",
+                "max_residue_ppm": 10,
+                "can_release_without_testing": False,
+                "description": "Full validation with microbiological testing"
+            }
+        }
+        
+        # Adjust for biotech/parenteral products
+        if product_type in ["biotech", "parenteral", "inhalation"]:
+            if base_requirements.get(level):
+                base_requirements[level]["microbiological_testing_required"] = True
+                base_requirements[level]["verification_frequency"] = "Every batch"
+        
+        return base_requirements.get(level, base_requirements.get(CleaningLevelEnum.LEVEL_1))

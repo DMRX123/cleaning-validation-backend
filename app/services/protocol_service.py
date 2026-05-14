@@ -5,7 +5,7 @@ from ..models.validation_protocol import ValidationProtocol, ProtocolExecutionRe
 from ..models.product import Product
 from ..models.equipment import Equipment
 from ..services.maco import MACOService
-from ..services.swab import SwabService
+from .swab import SwabService
 from ..services.rinse import RinseService
 
 class ProtocolService:
@@ -178,3 +178,55 @@ class ProtocolService:
             "Analytical methods used",
             "Deviations and investigation procedures"
         ]
+    
+    @staticmethod
+    def check_consecutive_success(db: Session, protocol_id: int) -> dict:
+        """
+        Section 5.3.2 - Track consecutive successful cleans
+        Returns dict with validation status and required actions
+        """
+        from ..models.validation_protocol import ValidationProtocol, ProtocolExecutionResult
+        
+        protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
+        if not protocol:
+            return {"error": "Protocol not found"}
+        
+        # Get all results in order
+        results = db.query(ProtocolExecutionResult).filter(
+            ProtocolExecutionResult.protocol_id == protocol_id
+        ).order_by(ProtocolExecutionResult.execution_number).all()
+        
+        if not results:
+            return {
+                "consecutive_passes": 0,
+                "required_passes": protocol.consecutive_passes_required,
+                "validation_complete": False,
+                "status": "No executions yet"
+            }
+        
+        # Count consecutive passes from most recent
+        consecutive_passes = 0
+        for result in reversed(results):
+            if result.overall_result == "PASS":
+                consecutive_passes += 1
+            else:
+                break
+        
+        validation_complete = consecutive_passes >= protocol.consecutive_passes_required
+        
+        # Update protocol
+        protocol.consecutive_passes_achieved = consecutive_passes
+        if validation_complete and protocol.status != "APPROVED":
+            protocol.status = "APPROVED"
+        elif not validation_complete and protocol.status == "APPROVED":
+            protocol.status = "EXECUTED"  # Reset if validation broken
+        
+        db.commit()
+        
+        return {
+            "consecutive_passes": consecutive_passes,
+            "required_passes": protocol.consecutive_passes_required,
+            "validation_complete": validation_complete,
+            "status": protocol.status,
+            "message": f"Validation {'complete' if validation_complete else f'in progress - need {protocol.consecutive_passes_required - consecutive_passes} more passes'}"
+        }

@@ -59,6 +59,20 @@ class ValidationProtocol(Base):
     approved_by = Column(String, nullable=True)
     approved_date = Column(DateTime, nullable=True)
     
+    # Section 9.9 - Deviations at protocol level
+    protocol_deviations = Column(JSON, nullable=True)  # List of deviations
+    
+    # Section 9.10 - Revalidation strategy
+    revalidation_strategy = Column(Text, nullable=True)
+    revalidation_frequency_months = Column(Integer, default=12)
+    last_revalidation_date = Column(DateTime, nullable=True)
+    
+    # Consecutive success tracking (Section 5.3.2)
+    consecutive_passes_required = Column(Integer, default=3)
+    consecutive_passes_achieved = Column(Integer, default=0)
+    last_fail_date = Column(DateTime, nullable=True)
+    validation_reset_count = Column(Integer, default=0)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

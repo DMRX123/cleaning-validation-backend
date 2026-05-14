@@ -42,6 +42,25 @@ from .guideline_helpers import (
     get_worst_case_rating
 )
 
+# APIC Guideline Constants (2021)
+from .guideline_constants import (
+    UNCERTAINTY_FACTORS,
+    TTC_VALUES_UG_PER_DAY,
+    CLEANING_LEVELS,
+    WORST_CASE_WEIGHTS,
+    MICROBIOLOGICAL_LIMITS,
+    HOLD_TIME_DEFAULTS,
+    PRODUCTION_TYPE_FACTORS,
+)
+
+# Section 6.0 - Process Control Constants
+from .process_constants import (
+    DEFAULT_CLEANING_PARAMETERS,
+    CAPABILITY_THRESHOLDS,
+    RISK_LEVELS,
+    CLEANING_TYPE_REQUIREMENTS,
+)
+
 __all__ = [
     # Excel Utilities
     "import_products_from_excel",
@@ -95,4 +114,19 @@ __all__ = [
     "calculate_carry_over_rinse",  # Section 8.3.2
     "get_cleaning_level",          # Section 5.2
     "get_worst_case_rating",       # Section 7.4
+    
+    # APIC Guideline Constants (2021)
+    "UNCERTAINTY_FACTORS",
+    "TTC_VALUES_UG_PER_DAY",
+    "CLEANING_LEVELS",
+    "WORST_CASE_WEIGHTS",
+    "MICROBIOLOGICAL_LIMITS",
+    "HOLD_TIME_DEFAULTS",
+    "PRODUCTION_TYPE_FACTORS",
+    
+    # Section 6.0 - Process Control Constants
+    "DEFAULT_CLEANING_PARAMETERS",
+    "CAPABILITY_THRESHOLDS",
+    "RISK_LEVELS",
+    "CLEANING_TYPE_REQUIREMENTS",
 ]

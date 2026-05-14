@@ -13,6 +13,8 @@ from . import static_data
 from . import dashboard
 from . import cleaning_validation
 from . import protocols
+from . import guidance
+from . import cleaning_process
 
 __all__ = [
     "auth",
@@ -25,4 +27,6 @@ __all__ = [
     "dashboard",
     "cleaning_validation",
     "protocols",
+    "guidance",
+    "cleaning_process",
 ]
