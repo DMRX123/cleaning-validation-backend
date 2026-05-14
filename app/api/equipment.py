@@ -19,7 +19,7 @@ def get_equipment(
 ):
     """Get all equipment"""
     equipment = db.query(Equipment).offset(skip).limit(limit).all()
-    return equipment
+    return equipment  # Returns empty list [] if no equipment, which is valid
 
 @router.post("/", response_model=EquipmentResponse)
 def create_equipment(

@@ -1,6 +1,4 @@
-# app/models/equipment.py - COMPLETE FIXED VERSION with timestamps
-from sqlalchemy import Column, Integer, String, Float, DateTime
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, Float
 from ..database import Base
 
 class Equipment(Base):
@@ -14,7 +12,3 @@ class Equipment(Base):
     used_for = Column(String, nullable=False)
     cleaning_procedure = Column(String, nullable=False)
     plant = Column(String, nullable=False)
-    
-    # Timestamp columns
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

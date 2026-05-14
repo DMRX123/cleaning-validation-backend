@@ -93,7 +93,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 # CORS Middleware
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,https://cleaning-validation-frontend.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -102,6 +102,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,
 )
 
 # ==================== AUTO DATABASE SETUP FUNCTION ====================
