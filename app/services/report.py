@@ -1,3 +1,4 @@
+# app/services/report.py - FIXED
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -10,7 +11,8 @@ class ReportService:
     """PDF Report Generation - Professional validation reports"""
     
     @staticmethod
-    def generate_validation_report(session, swab_results, rinse_results, maco_data, equipment_list):
+    def generate_validation_report(session, swab_results, rinse_results, maco_data, equipment_list=None):
+        """Generate PDF validation report"""
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, 
                                 rightMargin=72, leftMargin=72,
@@ -82,7 +84,7 @@ class ReportService:
         story.append(maco_table)
         story.append(Spacer(1, 15))
         
-        # Equipment Section
+        # Equipment Section (if equipment_list provided)
         if equipment_list:
             story.append(Paragraph("3. Equipment Details", heading_style))
             eq_data = [["Sr. No.", "Equipment Name", "ID", "Surface Area (m²)", "Used For"]]

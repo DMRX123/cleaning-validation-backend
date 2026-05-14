@@ -292,3 +292,4 @@ def get_hold_time_defaults(
         "max_clean_hold_time_hours": defaults.get("cht_max", defaults.get("cht", 72) * 2),
         "reference": "APIC Cleaning Validation Guide Section 9.7"
     }
+    
