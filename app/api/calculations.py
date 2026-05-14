@@ -25,7 +25,7 @@ class RinseLimitRequest(BaseModel):
     session_id: int
     equipment_id: int
     rinse_volume: float
-    total_surface_area: float  # Total product contact surface area
+    total_surface_area: float
 
 @router.post("/maco")
 def calculate_maco(request: MACORequest, db: Session = Depends(get_db)):
@@ -36,7 +36,13 @@ def calculate_maco(request: MACORequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Product not found")
     
     result = MACOService.calculate_all(previous, next_product)
-    return result
+    return {
+        "method_10ppm": result.get("method_10ppm", 0),
+        "method_tdd": result.get("method_tdd", 0),
+        "method_ade_pde": result.get("method_ade_pde", 0),
+        "method_ttc": result.get("method_ttc", 0),
+        "lowest_maco": result.get("lowest_maco", 0)
+    }
 
 @router.post("/swab-limit")
 def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db)):
@@ -44,8 +50,41 @@ def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    result = SwabService.calculate_swab_limit(session, request.total_surface_area)
-    return result
+    # Get MACO from session or calculate
+    if session.lowest_maco:
+        maco_mg = session.lowest_maco
+    else:
+        # Calculate MACO if not stored
+        previous = session.previous_product
+        next_product = session.next_product
+        if not previous or not next_product:
+            raise HTTPException(status_code=404, detail="Products not found in session")
+        maco_result = MACOService.calculate_all(previous, next_product)
+        maco_mg = maco_result.get("lowest_maco", 0)
+    
+    product = session.next_product
+    if not product:
+        raise HTTPException(status_code=404, detail="Next product not found")
+    
+    mg_per_swab = SwabService.calculate_mg_per_swab(
+        maco_mg=maco_mg,
+        swab_surface_area=product.swab_surface_area,
+        total_surface_area=request.total_surface_area,
+        recovery_percent=product.swab_recovery
+    )
+    
+    ppm = SwabService.calculate_ppm(
+        maco_mg=maco_mg,
+        swab_surface_area=product.swab_surface_area,
+        total_surface_area=request.total_surface_area,
+        swab_dilution_ml=product.swab_dilution,
+        recovery_percent=product.swab_recovery
+    )
+    
+    return {
+        "mg_per_swab": mg_per_swab,
+        "ppm": ppm
+    }
 
 @router.post("/rinse-limit")
 def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_db)):
@@ -60,17 +99,19 @@ def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
     
-    # Get MACO value from session (assuming it's stored or calculate it)
-    # For now, get from session or previous/next product
+    # Get products from session
     previous_product = session.previous_product
     next_product = session.next_product
     
     if not previous_product or not next_product:
         raise HTTPException(status_code=404, detail="Products not found in session")
     
-    # Calculate MACO
-    maco_result = MACOService.calculate_all(previous_product, next_product)
-    maco_mg = maco_result.get("maco_mg", 0)
+    # Get MACO - first check session, otherwise calculate
+    if session.lowest_maco:
+        maco_mg = session.lowest_maco
+    else:
+        maco_result = MACOService.calculate_all(previous_product, next_product)
+        maco_mg = maco_result.get("lowest_maco", 0)
     
     # Calculate rinse limit using RinseService
     limit_mg = RinseService.calculate_rinse_limit(
@@ -97,7 +138,7 @@ def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_
     
     # Calculate volume by AMV
     swab_dilution = next_product.swab_dilution if next_product.swab_dilution else 20
-    swab_area = next_product.swab_area if next_product.swab_area else 0.01
+    swab_area = next_product.swab_surface_area if next_product.swab_surface_area else 0.01
     volume_amv = RinseService.calculate_volume_by_amv(
         swab_dilution_ml=swab_dilution,
         swab_surface_area_m2=swab_area,

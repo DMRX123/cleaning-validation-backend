@@ -12,9 +12,10 @@ from ..services.rinse import RinseService
 from ..services.acceptability import AcceptabilityService
 from ..services.extra_area import ExtraAreaService
 from ..services.equipment_filter import EquipmentFilterService
-from .auth import get_current_user  # ADD THIS LINE
+from .auth import get_current_user
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 import uuid
 
 router = APIRouter()
@@ -23,6 +24,23 @@ class SessionCreate(BaseModel):
     previous_product_id: int
     next_product_id: int
     extra_area_percentage: float = 0
+
+class SessionUpdate(BaseModel):
+    step: Optional[int] = None
+    data: Optional[dict] = None
+    previous_product_id: Optional[int] = None
+    next_product_id: Optional[int] = None
+    extra_area_percentage: Optional[float] = None
+    total_surface_area: Optional[float] = None
+    maco_10ppm: Optional[float] = None
+    maco_tdd: Optional[float] = None
+    maco_ade_pde: Optional[float] = None
+    lowest_maco: Optional[float] = None
+    swab_limit_mg: Optional[float] = None
+    swab_limit_ppm: Optional[float] = None
+    rinse_limit_mg: Optional[float] = None
+    rinse_limit_ppm: Optional[float] = None
+    status: Optional[str] = None
 
 class StandardPrepCreate(BaseModel):
     session_id: int
@@ -63,6 +81,38 @@ def create_session(data: SessionCreate, db: Session = Depends(get_db)):
     db.refresh(new_session)
     return new_session
 
+
+@router.put("/session/{session_id}")
+def update_session(
+    session_id: int, 
+    data: SessionUpdate, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Update validation session - FIXED: Added this endpoint"""
+    session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    update_data = data.dict(exclude_unset=True)
+    
+    # Remove 'data' field if present as it's for nested storage
+    if 'data' in update_data:
+        update_data.pop('data')
+    
+    for key, value in update_data.items():
+        if hasattr(session, key) and value is not None:
+            setattr(session, key, value)
+    
+    # If step is provided and status is DRAFT, update to IN_PROGRESS
+    if data.step and data.step > 1 and session.status == "DRAFT":
+        session.status = "IN_PROGRESS"
+    
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 @router.get("/session/{session_id}")
 def get_session(session_id: int, db: Session = Depends(get_db)):
     session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
@@ -70,11 +120,13 @@ def get_session(session_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
+
 @router.get("/history")
 def get_validation_history(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get all validation sessions for history/chart"""
     sessions = db.query(ValidationSession).order_by(ValidationSession.created_at.desc()).all()
     return sessions
+
 
 @router.post("/standard-prep")
 def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)):
@@ -89,6 +141,7 @@ def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(new_prep)
     return new_prep
+
 
 @router.post("/swab-result")
 def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
@@ -117,6 +170,7 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_result)
     return new_result
+
 
 @router.post("/rinse-result")
 def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
