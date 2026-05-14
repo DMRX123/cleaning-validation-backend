@@ -1,3 +1,4 @@
+# app/api/cleaning_validation.py - COMPLETE FIXED VERSION
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -48,7 +49,7 @@ class CleaningLevelRequest(BaseModel):
     same_synthetic_chain: bool = False
 
 # ============================================
-# CLEANING LEVEL ENDPOINTS
+# CLEANING LEVEL ENDPOINTS (FIXED - removed duplicate prefix)
 # ============================================
 
 @router.post("/determine-cleaning-level")
@@ -57,7 +58,6 @@ def determine_cleaning_level(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Section 5.0 - Determine cleaning level based on risk"""
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
     
@@ -85,7 +85,6 @@ def validate_dirty_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Section 9.7 - Validate Dirty Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -109,7 +108,6 @@ def validate_clean_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Section 9.7 - Validate Clean Hold Time"""
     equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -137,7 +135,6 @@ def extend_hold_time(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Extend validated hold time with justification"""
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
@@ -162,25 +159,22 @@ def calculate_maco_advanced(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Section 4.2.1 - Advanced MACO with PF, SF, and production type factor"""
     previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
     next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
     
     if not previous or not next_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Apply production type factor (Section 4.2.6)
     factor = LimitRationaleService.get_factor(request.production_type)
     
     result = MACOService.calculate_all(
         previous, next_product,
-        purging_factor=request.purging_factor * factor,
+        purging_factor=request.purging_factor * factor if factor else request.purging_factor,
         safety_factor=request.safety_factor
     )
     
-    # Add rationale
     result["rationale"] = LimitRationaleService.get_rationale(request.production_type, [])
-    result["production_type_factor_applied"] = factor
+    result["production_type_factor_applied"] = factor if factor else 1
     
     return {
         "success": True,
@@ -197,7 +191,6 @@ def create_bracketing_matrix(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Section 7.5 - Create worst case rating matrix"""
     if not request.product_ids:
         raise HTTPException(status_code=400, detail="product_ids cannot be empty")
     
@@ -206,10 +199,7 @@ def create_bracketing_matrix(
     if not products:
         raise HTTPException(status_code=404, detail="No products found")
     
-    # Get bracketing matrix from service
     matrix_result = BracketingService.create_bracketing_matrix(products)
-    
-    # Get worst case product
     worst_case = BracketingService.select_worst_case(products)
     
     return {
@@ -232,7 +222,6 @@ def get_microbiological_limits(
     product_type: str,
     current_user = Depends(get_current_user)
 ):
-    """Section 8.1 - Get microbiological limits by product type"""
     valid_types = ["oral", "parenteral", "topical", "biotech", "inhalation"]
     if product_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid product_type. Must be one of: {valid_types}")
@@ -258,7 +247,6 @@ def get_limit_rationale(
     has_purification: bool = False,
     current_user = Depends(get_current_user)
 ):
-    """Section 4.2.6 - Get scientific rationale for different limits"""
     valid_types = ["pharmaceutical", "api_chemical", "api_physical", "intermediate_early", "intermediate_late", "dedicated"]
     if production_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid production_type. Must be one of: {valid_types}")
@@ -280,7 +268,6 @@ def get_hold_time_defaults(
     equipment_type: str,
     current_user = Depends(get_current_user)
 ):
-    """Get default hold time limits for equipment type"""
     defaults = HoldTimeService.get_default_limits(equipment_type)
     
     return {
@@ -292,4 +279,3 @@ def get_hold_time_defaults(
         "max_clean_hold_time_hours": defaults.get("cht_max", defaults.get("cht", 72) * 2),
         "reference": "APIC Cleaning Validation Guide Section 9.7"
     }
-    

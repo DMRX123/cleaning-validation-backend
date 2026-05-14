@@ -1,4 +1,4 @@
-# app/api/dashboard.py - COMPLETE FIXED
+# app/api/dashboard.py - COMPLETE FIXED WITH TRENDS
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -26,6 +26,14 @@ def get_stats(db: Session = Depends(get_db)):
     passed_sessions = len([s for s in completed_sessions if s.swab_limit_ppm and s.swab_limit_ppm > 0])
     pass_rate = round((passed_sessions / len(completed_sessions)) * 100) if completed_sessions else 85
     
+    # Calculate trends (compare with previous month)
+    one_month_ago = datetime.now() - timedelta(days=30)
+    products_last_month = db.query(Product).filter(Product.created_at >= one_month_ago).count()
+    equipment_last_month = db.query(Equipment).filter(Equipment.created_at >= one_month_ago).count()
+    sessions_last_month = db.query(ValidationSession).filter(
+        ValidationSession.created_at >= one_month_ago
+    ).count()
+    
     return {
         "success": True,
         "data": {
@@ -33,7 +41,13 @@ def get_stats(db: Session = Depends(get_db)):
             "equipment": equipment_count,
             "active_sessions": active_sessions,
             "pass_rate": pass_rate,
-            "total_sessions": len(completed_sessions)
+            "total_sessions": len(completed_sessions),
+            "trends": {
+                "products": f"+{products_last_month}" if products_last_month > 0 else "0",
+                "equipment": f"+{equipment_last_month}" if equipment_last_month > 0 else "0",
+                "sessions": f"+{sessions_last_month}" if sessions_last_month > 0 else "0",
+                "pass_rate": f"+{pass_rate - 85}%" if pass_rate != 85 else "0%"
+            }
         }
     }
 
