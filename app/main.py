@@ -58,44 +58,15 @@ async def log_requests(request: Request, call_next):
     return response
 
 # ==================== CORS MIDDLEWARE (PRODUCTION READY) ====================
-# Get allowed origins from environment variable
-ALLOWED_ORIGINS = []
-
-# Default origins for development
-default_origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-]
-
-# Production origins (Vercel)
-production_origins = [
-    "https://cleaning-validation-frontend.vercel.app",
-    "https://cleaning-validation.vercel.app",
-    "https://cleaning-validation-frontend-git-main.vercel.app",
-]
-
-# Combine all origins
-ALLOWED_ORIGINS.extend(default_origins)
-ALLOWED_ORIGINS.extend(production_origins)
-
-# Also check environment variable if set (for Render deployment)
-env_origins = os.getenv("CORS_ORIGINS", "")
-if env_origins:
-    for origin in env_origins.split(","):
-        origin = origin.strip()
-        if origin and origin not in ALLOWED_ORIGINS:
-            ALLOWED_ORIGINS.append(origin)
-
-# Remove duplicates
-ALLOWED_ORIGINS = list(dict.fromkeys(ALLOWED_ORIGINS))
+# Get allowed origins from config
+ALLOWED_ORIGINS = config.get_cors_origins()
 
 logger.info("=" * 60)
 logger.info("CORS CONFIGURATION")
-logger.info(f"Allowed origins: {ALLOWED_ORIGINS}")
-logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
+logger.info(f"Environment: {config.ENVIRONMENT}")
+logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
+for origin in ALLOWED_ORIGINS:
+    logger.info(f"  - {origin}")
 logger.info("=" * 60)
 
 # Add CORS middleware
@@ -124,19 +95,22 @@ app.add_middleware(
 )
 
 # Add explicit OPTIONS handler for preflight requests
-@app.options("/api/{path:path}")
-@app.options("/api/{path:path}/{subpath:path}")
-async def options_handler(request: Request, path: str = "", subpath: str = ""):
-    """Handle CORS preflight requests"""
+@app.options("/{full_path:path}")
+async def options_handler(request: Request, full_path: str = ""):
+    """Handle CORS preflight requests for all paths"""
     origin = request.headers.get("origin", "")
-    if origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+    
+    # Check if origin is allowed
+    is_allowed = origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS
+    
+    if is_allowed:
         return JSONResponse(
             status_code=200,
             content={},
             headers={
-                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Origin": origin if origin != "*" else "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Accept, Accept-Language, Content-Language, Content-Type, Authorization, X-Requested-With",
+                "Access-Control-Allow-Headers": "Accept, Accept-Language, Content-Language, Content-Type, Authorization, X-Requested-With, Origin",
                 "Access-Control-Allow-Credentials": "true",
                 "Access-Control-Max-Age": "3600",
             }
@@ -269,8 +243,9 @@ def setup_database_on_startup():
 async def startup_event():
     logger.info("=" * 60)
     logger.info("Starting up Cleaning Validation API...")
-    logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    logger.info(f"Debug mode: {os.getenv('DEBUG', 'True')}")
+    logger.info(f"Environment: {config.ENVIRONMENT}")
+    logger.info(f"Debug mode: {config.DEBUG}")
+    logger.info(f"API Version: {config.API_VERSION}")
     try:
         init_db()
         logger.info("✅ Database tables ready")
@@ -301,12 +276,12 @@ def health_check(db: Session = Depends(get_db)):
     
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
-        "version": "2.0.0",
+        "version": config.API_VERSION,
         "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
         "allowed_origins": ALLOWED_ORIGINS,
-        "environment": os.getenv("ENVIRONMENT", "development")
+        "environment": config.ENVIRONMENT
     }
 
 @app.get("/")
@@ -314,7 +289,7 @@ def root():
     return {
         "message": "Cleaning Validation API is running",
         "status": "healthy",
-        "version": "2.0.0",
+        "version": config.API_VERSION,
         "documentation": "/docs",
         "apic_compliance": "100%",
         "guideline_version": "APIC Cleaning Validation Guide 2021"
@@ -340,9 +315,9 @@ app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags
 @app.get("/api/info")
 def api_info():
     return {
-        "name": "Cleaning Validation System API",
-        "version": "2.0.0",
-        "description": "Complete APIC Guideline Compliant Cleaning Validation System (2021)",
+        "name": config.API_TITLE,
+        "version": config.API_VERSION,
+        "description": config.API_DESCRIPTION,
         "status": "production_ready",
         "guideline_compliance": {
             "section_4.2.1": "ADE/PDE Calculation (NOAEL/LOAEL/LD50/TTC)",
@@ -404,5 +379,6 @@ def api_info():
             "allow_credentials": True,
             "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
             "allow_headers": ["Accept", "Accept-Language", "Content-Language", "Content-Type", "Authorization", "X-Requested-With"]
-        }
+        },
+        "environment": config.ENVIRONMENT
     }

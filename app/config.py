@@ -42,7 +42,7 @@ class Config:
         logger.warning("⚠️ Using development SECRET_KEY. DO NOT use in production!")
     
     # ============================================
-    # CORS CONFIGURATION (Production Ready)
+    # CORS CONFIGURATION (Production Ready - Updated with all Vercel URLs)
     # ============================================
     # Default CORS origins for development
     DEFAULT_CORS_ORIGINS = [
@@ -53,12 +53,13 @@ class Config:
         "http://127.0.0.1:5173",
     ]
     
-    # Production CORS origins (Vercel frontend)
+    # Production CORS origins (All Vercel frontend URLs)
     PRODUCTION_CORS_ORIGINS = [
         "https://cleaning-validation-frontend.vercel.app",
         "https://cleaning-validation.vercel.app",
         "https://cleaning-validation-frontend-git-main.vercel.app",
         "https://cleaning-validation-frontend-dmrx123.vercel.app",
+        "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
     ]
     
     # Get CORS origins from environment variable (if set)
@@ -81,12 +82,16 @@ class Config:
     CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
     
     # Log CORS configuration
-    logger.info(f"🌐 CORS allowed origins ({len(CORS_ORIGINS)}): {CORS_ORIGINS}")
+    logger.info("=" * 60)
+    logger.info("🌐 CORS ALLOWED ORIGINS:")
+    for origin in CORS_ORIGINS:
+        logger.info(f"   - {origin}")
+    logger.info("=" * 60)
     
     # ============================================
     # ENVIRONMENT CONFIGURATION
     # ============================================
-    DEBUG = os.getenv("DEBUG", str(not IS_PRODUCTION)).lower() == "true"
+    DEBUG = os.getenv("DEBUG", "False" if IS_PRODUCTION else "True").lower() == "true"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO" if IS_PRODUCTION else "DEBUG")
     
     # Configure logging level
