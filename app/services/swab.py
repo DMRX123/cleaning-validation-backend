@@ -75,12 +75,31 @@ class SwabService:
         """
         Excel Formula from Swab Result sheet
         Validates that absorbance values are non-negative
+        
+        Returns:
+            mg_ml: Numeric value in mg/ml
+            ppm_numeric: ALWAYS a number (0 if below LOQ) - SAFE for toFixed()
+            ppm_display: String for display ("Below LOQ" or value as string)
+            reported: Same as ppm_display (backward compatibility)
+            below_loq: Boolean flag
         """
         # Validation: absorbance values must be >= 0
         if absorbance_sample < 0:
-            return {"mg_ml": 0, "ppm": 0, "reported": "Error - Negative sample absorbance"}
+            return {
+                "mg_ml": 0, 
+                "ppm_numeric": 0, 
+                "ppm_display": "Error - Negative sample absorbance",
+                "reported": "Error - Negative sample absorbance",
+                "below_loq": True
+            }
         if absorbance_std <= 0:
-            return {"mg_ml": 0, "ppm": 0, "reported": "Error - Std Abs zero or negative"}
+            return {
+                "mg_ml": 0, 
+                "ppm_numeric": 0, 
+                "ppm_display": "Error - Std Abs zero or negative",
+                "reported": "Error - Std Abs zero or negative",
+                "below_loq": True
+            }
         
         mg_ml = (absorbance_sample / absorbance_std) * dilution_factor * swab_dilution_ml
         
@@ -93,16 +112,22 @@ class SwabService:
             mg_ml = mg_ml * (100 / potency)
         
         ppm = mg_ml * 1000
+        ppm_numeric = round(ppm, 2)
+        below_loq = ppm < loq_ppm
         
-        if ppm < loq_ppm:
-            reported = "Below LOQ"
+        if below_loq:
+            ppm_display = "Below LOQ"
+            ppm_numeric = 0.0  # CRITICAL: Always number for frontend toFixed()
         else:
-            reported = round(ppm, 2)
+            ppm_display = str(ppm_numeric)
         
         return {
             "mg_ml": round(mg_ml, 6),
-            "ppm": round(ppm, 2),
-            "reported": reported
+            "ppm_numeric": ppm_numeric,      # ← ALWAYS NUMBER (0 if below LOQ)
+            "ppm_display": ppm_display,       # ← STRING for display
+            "reported": ppm_display,          # ← Backward compatibility
+            "below_loq": below_loq,           # ← Boolean flag
+            "ppm": ppm_numeric                # ← For backward compatibility
         }
     
     @staticmethod
@@ -139,10 +164,13 @@ class SwabService:
         for idx, area in enumerate(sampling_areas):
             if idx < len(swab_results):
                 result = swab_results[idx]
-                # Convert ppm to mg per dm²
-                # ppm = mg/L, but for swab: result_ppm is mg per swab area (dm²)
-                # Assume result_ppm is already in mg per swab area (dm²)
-                residue_per_area = result.result_ppm if hasattr(result, 'result_ppm') else result.get('result_ppm', 0)
+                # Use result_ppm (which is now always numeric)
+                if hasattr(result, 'result_ppm'):
+                    residue_per_area = result.result_ppm or 0
+                elif isinstance(result, dict):
+                    residue_per_area = result.get('result_ppm', 0)
+                else:
+                    residue_per_area = 0
                 
                 # Per-area contribution
                 contribution = area.surface_area_dm2 * residue_per_area
@@ -164,6 +192,6 @@ class SwabService:
             "total_carry_over_mg": round(total_carry_over, 4),
             "total_surface_area_dm2": total_surface_area_dm2,
             "recovery_factor_used": recovery_factor,
-            "status": "PASS" if total_carry_over <= 1.0 else "FAIL",  # Threshold configurable
+            "status": "PASS" if total_carry_over <= 1.0 else "FAIL",
             "details": details
         }

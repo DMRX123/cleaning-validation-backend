@@ -145,6 +145,10 @@ def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)
 
 @router.post("/swab-result")
 def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
+    """
+    Create swab result with proper numeric handling
+    result_ppm is ALWAYS a number (0 if below LOQ) - safe for frontend toFixed()
+    """
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
     
@@ -153,27 +157,48 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
     
     recovery = session.next_product.swab_recovery if session.next_product else 100
     loq = session.next_product.loq if session.next_product else 0
+    swab_dilution = session.next_product.swab_dilution if session.next_product else 20
     
     result = SwabService.calculate_result(
         data.absorbance_sample, data.absorbance_std,
-        prep.dilution_factor, session.next_product.swab_dilution if session.next_product else 20,
+        prep.dilution_factor, swab_dilution,
         recovery, loq
     )
     
     new_result = SwabResult(
-        **data.dict(),
+        session_id=data.session_id,
+        location_name=data.location_name,
+        absorbance_sample=data.absorbance_sample,
+        absorbance_std=data.absorbance_std,
         result_mg_ml=result["mg_ml"],
-        result_ppm=result["ppm"],
-        reported=str(result["reported"])
+        result_ppm=result["ppm_numeric"],
+        reported=result["reported"]
     )
     db.add(new_result)
     db.commit()
     db.refresh(new_result)
-    return new_result
+    
+    # Return enhanced response with both numeric and display values
+    return {
+        "id": new_result.id,
+        "session_id": new_result.session_id,
+        "location_name": new_result.location_name,
+        "absorbance_sample": new_result.absorbance_sample,
+        "absorbance_std": new_result.absorbance_std,
+        "result_mg_ml": new_result.result_mg_ml,
+        "result_ppm": new_result.result_ppm,
+        "result_ppm_display": result["ppm_display"],
+        "reported": new_result.reported,
+        "below_loq": result["below_loq"]
+    }
 
 
 @router.post("/rinse-result")
 def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
+    """
+    Create rinse result with proper numeric handling
+    result_ppm is ALWAYS a number (0 if below LOQ) - safe for frontend toFixed()
+    """
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
     
@@ -190,12 +215,27 @@ def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
     )
     
     new_result = RinseResult(
-        **data.dict(),
+        session_id=data.session_id,
+        equipment_name=data.equipment_name,
+        actual_rinse_volume=data.actual_rinse_volume,
+        absorbance_sample=data.absorbance_sample,
+        absorbance_std=data.absorbance_std,
         result_mg_ml=result["mg_ml"],
-        result_ppm=result["ppm"],
-        reported=str(result["reported"])
+        result_ppm=result["ppm_numeric"],
+        reported=result["reported"]
     )
     db.add(new_result)
     db.commit()
     db.refresh(new_result)
-    return new_result
+    
+    return {
+        "id": new_result.id,
+        "session_id": new_result.session_id,
+        "equipment_name": new_result.equipment_name,
+        "actual_rinse_volume": new_result.actual_rinse_volume,
+        "result_mg_ml": new_result.result_mg_ml,
+        "result_ppm": new_result.result_ppm,
+        "result_ppm_display": result["ppm_display"],
+        "reported": new_result.reported,
+        "below_loq": result["below_loq"]
+    }
