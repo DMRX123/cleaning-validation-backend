@@ -58,26 +58,32 @@ async def log_requests(request: Request, call_next):
     return response
 
 # ==================== CORS MIDDLEWARE (FIXED FOR PRODUCTION) ====================
-# Get allowed origins from environment variable or use defaults including Vercel
-CORS_ORIGINS = os.getenv(
-    "CORS_ORIGINS", 
-    "http://localhost:3000,http://localhost:3001,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,https://cleaning-validation-frontend.vercel.app"
-).split(",")
-
-# Also add the frontend production URL explicitly
-ALLOWED_ORIGINS = CORS_ORIGINS + [
+# For production - allow specific origins including Vercel
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
     "https://cleaning-validation-frontend.vercel.app",
-    "https://cleaning-validation-frontend.vercel.app/*",
+    "https://cleaning-validation.vercel.app",
 ]
 
-# Remove duplicates while preserving order
+# Also check environment variable if set
+env_origins = os.getenv("CORS_ORIGINS", "")
+if env_origins:
+    for origin in env_origins.split(","):
+        if origin.strip():
+            ALLOWED_ORIGINS.append(origin.strip())
+
+# Remove duplicates
 ALLOWED_ORIGINS = list(dict.fromkeys(ALLOWED_ORIGINS))
 
 logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # Allow specific origins including Vercel
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],

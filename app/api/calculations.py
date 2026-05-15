@@ -10,7 +10,9 @@ from ..services.rinse import RinseService
 from ..services.worst_case import WorstCaseService
 from ..services.equipment_filter import EquipmentFilterService
 from pydantic import BaseModel
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class MACORequest(BaseModel):
@@ -50,11 +52,9 @@ def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Get MACO from session or calculate
     if session.lowest_maco:
         maco_mg = session.lowest_maco
     else:
-        # Calculate MACO if not stored
         previous = session.previous_product
         next_product = session.next_product
         if not previous or not next_product:
@@ -89,71 +89,84 @@ def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db
 @router.post("/rinse-limit")
 def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_db)):
     """Calculate rinse limit for equipment - ALL VALUES AS NUMBERS"""
-    # Get session
-    session = db.query(ValidationSession).filter(ValidationSession.id == request.session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    # Get equipment
-    equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
-    if not equipment:
-        raise HTTPException(status_code=404, detail="Equipment not found")
-    
-    # Get products from session
-    previous_product = session.previous_product
-    next_product = session.next_product
-    
-    if not previous_product or not next_product:
-        raise HTTPException(status_code=404, detail="Products not found in session")
-    
-    # Get MACO - first check session, otherwise calculate
-    if session.lowest_maco:
-        maco_mg = session.lowest_maco
-    else:
-        maco_result = MACOService.calculate_all(previous_product, next_product)
-        maco_mg = maco_result.get("lowest_maco", 0)
-    
-    # Calculate rinse limit using RinseService
-    limit_mg = RinseService.calculate_rinse_limit(
-        maco_mg=maco_mg,
-        equipment_surface_area=equipment.surface_area,
-        total_surface_area=request.total_surface_area
-    )
-    
-    # Calculate ppm from limit
-    limit_ppm = RinseService.calculate_ppm_from_limit(
-        limit_mg=limit_mg,
-        rinse_volume_l=request.rinse_volume
-    )
-    
-    # Calculate volume by LOQ
-    loq = next_product.loq if next_product.loq else 0.1
-    volume_loq = RinseService.calculate_volume_by_loq(
-        limit_mg=limit_mg,
-        loq_ppm=loq
-    )
-    
-    # Calculate volume by 10ppm
-    volume_10ppm = RinseService.calculate_volume_by_10ppm(limit_mg=limit_mg)
-    
-    # Calculate volume by AMV
-    swab_dilution = next_product.swab_dilution if next_product.swab_dilution else 20
-    swab_area = next_product.swab_surface_area if next_product.swab_surface_area else 0.01
-    volume_amv = RinseService.calculate_volume_by_amv(
-        swab_dilution_ml=swab_dilution,
-        swab_surface_area_m2=swab_area,
-        equipment_surface_area_m2=equipment.surface_area
-    )
-    
-    # ENSURE ALL VALUES ARE NUMBERS (float) - CRITICAL FOR FRONTEND toFixed()
-    return {
-        "limit_mg": float(limit_mg) if limit_mg is not None else 0.0,
-        "limit_ppm": float(limit_ppm) if limit_ppm is not None else 0.0,
-        "volume_loq": float(volume_loq) if volume_loq is not None else 0.0,
-        "volume_10ppm": float(volume_10ppm) if volume_10ppm is not None else 0.0,
-        "volume_amv": float(volume_amv) if volume_amv is not None else 0.0,
-        "maco_mg": float(maco_mg) if maco_mg is not None else 0.0
-    }
+    try:
+        # Get session
+        session = db.query(ValidationSession).filter(ValidationSession.id == request.session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get equipment
+        equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
+        if not equipment:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+        
+        # Get products from session
+        previous_product = session.previous_product
+        next_product = session.next_product
+        
+        if not previous_product or not next_product:
+            raise HTTPException(status_code=404, detail="Products not found in session")
+        
+        # Get MACO
+        if session.lowest_maco and session.lowest_maco > 0:
+            maco_mg = float(session.lowest_maco)
+        else:
+            maco_result = MACOService.calculate_all(previous_product, next_product)
+            maco_mg = float(maco_result.get("lowest_maco", 0))
+        
+        # Validate inputs
+        equipment_surface_area = float(equipment.surface_area) if equipment.surface_area else 0.0
+        total_surface_area = float(request.total_surface_area) if request.total_surface_area else 0.0
+        rinse_volume = float(request.rinse_volume) if request.rinse_volume else 25.0
+        
+        # Calculate rinse limit
+        limit_mg = RinseService.calculate_rinse_limit(
+            maco_mg=maco_mg,
+            equipment_surface_area=equipment_surface_area,
+            total_surface_area=total_surface_area
+        )
+        
+        # Calculate ppm from limit
+        limit_ppm = RinseService.calculate_ppm_from_limit(
+            limit_mg=limit_mg,
+            rinse_volume_l=rinse_volume
+        )
+        
+        # Calculate volume by LOQ
+        loq = float(next_product.loq) if next_product.loq else 0.1
+        volume_loq_result = RinseService.calculate_volume_by_loq(
+            limit_mg=limit_mg,
+            loq_ppm=loq
+        )
+        volume_loq = volume_loq_result.get("volume_l", 0.0) if isinstance(volume_loq_result, dict) else float(volume_loq_result)
+        
+        # Calculate volume by 10ppm
+        volume_10ppm = RinseService.calculate_volume_by_10ppm(limit_mg=limit_mg)
+        
+        # Calculate volume by AMV
+        swab_dilution = float(next_product.swab_dilution) if next_product.swab_dilution else 20.0
+        swab_area = float(next_product.swab_surface_area) if next_product.swab_surface_area else 0.01
+        volume_amv = RinseService.calculate_volume_by_amv(
+            swab_dilution_ml=swab_dilution,
+            swab_surface_area_m2=swab_area,
+            equipment_surface_area_m2=equipment_surface_area
+        )
+        
+        response_data = {
+            "limit_mg": float(limit_mg),
+            "limit_ppm": float(limit_ppm),
+            "volume_loq": float(volume_loq),
+            "volume_10ppm": float(volume_10ppm),
+            "volume_amv": float(volume_amv),
+            "maco_mg": float(maco_mg)
+        }
+        
+        logger.info(f"Rinse limit calculated: {response_data}")
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Error in rinse-limit calculation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 @router.post("/worst-case")
 def find_worst_case(plant: str = None, db: Session = Depends(get_db)):
