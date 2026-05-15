@@ -1,4 +1,4 @@
-# app/api/reports.py - COMPLETE WITH JSON & EXCEL EXPORTS
+# app/api/reports.py - COMPLETE FIXED VERSION
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, JSONResponse
 from sqlalchemy.orm import Session
@@ -11,12 +11,29 @@ from ..models.product import Product
 from ..models.equipment import Equipment
 from ..services.report import ReportService
 from ..api.dependencies import get_current_user
-import io
-import json
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+import logging
+import traceback
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Helper function to safely get value
+def safe_value(value, default=0):
+    """Safely convert value to float/int, return default if None or invalid"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+def safe_str(value, default='N/A'):
+    """Safely convert value to string"""
+    if value is None:
+        return default
+    return str(value)
+
 
 @router.get("/{session_id}/pdf")
 def generate_report(
@@ -24,32 +41,72 @@ def generate_report(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
-    rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
-    
-    session_equipment = db.query(SessionEquipment).filter(SessionEquipment.session_id == session_id).all()
-    equipment_list = [se.equipment for se in session_equipment if se.equipment]
-    
-    maco_data = {
-        "10ppm": session.maco_10ppm,
-        "tdd": session.maco_tdd,
-        "ade_pde": session.maco_ade_pde,
-        "lowest": session.lowest_maco
-    }
-    
-    pdf_content = ReportService.generate_validation_report(
-        session, swab_results, rinse_results, maco_data, equipment_list
-    )
-    
-    return Response(
-        content=pdf_content,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=validation_report_{session.session_code}.pdf"}
-    )
+    """
+    Generate PDF report for validation session
+    Handles missing data gracefully
+    """
+    try:
+        logger.info(f"Generating PDF report for session {session_id}")
+        
+        # Get session
+        session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
+        if not session:
+            logger.error(f"Session {session_id} not found")
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        logger.info(f"Session found: {session.session_code}")
+        
+        # Get swab results
+        swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
+        logger.info(f"Found {len(swab_results)} swab results")
+        
+        # Get rinse results
+        rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
+        logger.info(f"Found {len(rinse_results)} rinse results")
+        
+        # Get equipment list for this session
+        session_equipment = db.query(SessionEquipment).filter(SessionEquipment.session_id == session_id).all()
+        equipment_list = []
+        for se in session_equipment:
+            if se.equipment:
+                equipment_list.append(se.equipment)
+        logger.info(f"Found {len(equipment_list)} equipment items")
+        
+        # Build MACO data with safe values
+        maco_data = {
+            "10ppm": safe_value(session.maco_10ppm, 0),
+            "tdd": safe_value(session.maco_tdd, 0),
+            "ade_pde": safe_value(session.maco_ade_pde, 0),
+            "lowest": safe_value(session.lowest_maco, 0)
+        }
+        logger.info(f"MACO data: {maco_data}")
+        
+        # Generate PDF
+        pdf_content = ReportService.generate_validation_report(
+            session, swab_results, rinse_results, maco_data, equipment_list
+        )
+        
+        if not pdf_content:
+            logger.error("PDF generation returned empty content")
+            raise HTTPException(status_code=500, detail="PDF generation failed - empty content")
+        
+        logger.info(f"PDF generated successfully for session {session_id}")
+        
+        return Response(
+            content=pdf_content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=validation_report_{session.session_code}.pdf",
+                "Content-Length": str(len(pdf_content))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF generation failed for session {session_id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 
 @router.get("/{session_id}/json")
@@ -59,80 +116,87 @@ def export_json(
     current_user = Depends(get_current_user)
 ):
     """Export validation data as JSON"""
-    session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
-    rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
-    
-    data = {
-        "session": {
-            "id": session.id,
-            "session_code": session.session_code,
-            "status": session.status,
-            "created_at": session.created_at.isoformat() if session.created_at else None,
-            "extra_area_percentage": session.extra_area_percentage,
-            "total_surface_area": session.total_surface_area
-        },
-        "previous_product": None,
-        "next_product": None,
-        "maco_calculations": {
-            "method_10ppm": session.maco_10ppm,
-            "method_tdd": session.maco_tdd,
-            "method_ade_pde": session.maco_ade_pde,
-            "lowest_maco": session.lowest_maco
-        },
-        "limits": {
-            "swab_limit_mg": session.swab_limit_mg,
-            "swab_limit_ppm": session.swab_limit_ppm,
-            "rinse_limit_mg": session.rinse_limit_mg,
-            "rinse_limit_ppm": session.rinse_limit_ppm
-        },
-        "swab_results": [
-            {
-                "location_name": r.location_name,
-                "absorbance_sample": r.absorbance_sample,
-                "absorbance_std": r.absorbance_std,
-                "result_mg_ml": r.result_mg_ml,
-                "result_ppm": r.result_ppm,
-                "reported": r.reported
-            }
-            for r in swab_results
-        ],
-        "rinse_results": [
-            {
-                "equipment_name": r.equipment_name,
-                "actual_rinse_volume": r.actual_rinse_volume,
-                "absorbance_sample": r.absorbance_sample,
-                "absorbance_std": r.absorbance_std,
-                "result_mg_ml": r.result_mg_ml,
-                "result_ppm": r.result_ppm,
-                "reported": r.reported
-            }
-            for r in rinse_results
-        ]
-    }
-    
-    if session.previous_product:
-        data["previous_product"] = {
-            "id": session.previous_product.id,
-            "name": session.previous_product.name,
-            "min_batch_size": session.previous_product.min_batch_size,
-            "max_batch_size": session.previous_product.max_batch_size,
-            "ade_pde": session.previous_product.ade_pde
+    try:
+        session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
+        rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
+        
+        data = {
+            "session": {
+                "id": session.id,
+                "session_code": safe_str(session.session_code),
+                "status": safe_str(session.status),
+                "created_at": session.created_at.isoformat() if session.created_at else None,
+                "extra_area_percentage": safe_value(session.extra_area_percentage, 0),
+                "total_surface_area": safe_value(session.total_surface_area, 0)
+            },
+            "previous_product": None,
+            "next_product": None,
+            "maco_calculations": {
+                "method_10ppm": safe_value(session.maco_10ppm, 0),
+                "method_tdd": safe_value(session.maco_tdd, 0),
+                "method_ade_pde": safe_value(session.maco_ade_pde, 0),
+                "lowest_maco": safe_value(session.lowest_maco, 0)
+            },
+            "limits": {
+                "swab_limit_mg": safe_value(session.swab_limit_mg, 0),
+                "swab_limit_ppm": safe_value(session.swab_limit_ppm, 0),
+                "rinse_limit_mg": safe_value(session.rinse_limit_mg, 0),
+                "rinse_limit_ppm": safe_value(session.rinse_limit_ppm, 0)
+            },
+            "swab_results": [
+                {
+                    "location_name": safe_str(r.location_name),
+                    "absorbance_sample": safe_value(r.absorbance_sample, 0),
+                    "absorbance_std": safe_value(r.absorbance_std, 0),
+                    "result_mg_ml": safe_value(r.result_mg_ml, 0),
+                    "result_ppm": safe_value(r.result_ppm, 0),
+                    "reported": safe_str(r.reported, "0")
+                }
+                for r in swab_results
+            ],
+            "rinse_results": [
+                {
+                    "equipment_name": safe_str(r.equipment_name),
+                    "actual_rinse_volume": safe_value(r.actual_rinse_volume, 0),
+                    "absorbance_sample": safe_value(r.absorbance_sample, 0),
+                    "absorbance_std": safe_value(r.absorbance_std, 0),
+                    "result_mg_ml": safe_value(r.result_mg_ml, 0),
+                    "result_ppm": safe_value(r.result_ppm, 0),
+                    "reported": safe_str(r.reported, "0")
+                }
+                for r in rinse_results
+            ]
         }
-    
-    if session.next_product:
-        data["next_product"] = {
-            "id": session.next_product.id,
-            "name": session.next_product.name,
-            "min_batch_size": session.next_product.min_batch_size,
-            "max_batch_size": session.next_product.max_batch_size,
-            "solubility": session.next_product.solubility
-        }
-    
-    return JSONResponse(content=data)
+        
+        if session.previous_product:
+            data["previous_product"] = {
+                "id": session.previous_product.id,
+                "name": safe_str(session.previous_product.name),
+                "min_batch_size": safe_value(session.previous_product.min_batch_size, 0),
+                "max_batch_size": safe_value(session.previous_product.max_batch_size, 0),
+                "ade_pde": safe_value(session.previous_product.ade_pde, 0)
+            }
+        
+        if session.next_product:
+            data["next_product"] = {
+                "id": session.next_product.id,
+                "name": safe_str(session.next_product.name),
+                "min_batch_size": safe_value(session.next_product.min_batch_size, 0),
+                "max_batch_size": safe_value(session.next_product.max_batch_size, 0),
+                "solubility": safe_str(session.next_product.solubility)
+            }
+        
+        return JSONResponse(content=data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"JSON export failed for session {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"JSON export failed: {str(e)}")
 
 
 @router.get("/{session_id}/excel")
@@ -142,86 +206,23 @@ def export_excel(
     current_user = Depends(get_current_user)
 ):
     """Export validation data as Excel"""
-    session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
-    rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
-    
-    workbook = openpyxl.Workbook()
-    
-    # Session Info Sheet
-    info_sheet = workbook.active
-    info_sheet.title = "Session Info"
-    info_sheet.cell(1, 1, "Session Code")
-    info_sheet.cell(1, 2, session.session_code)
-    info_sheet.cell(2, 1, "Status")
-    info_sheet.cell(2, 2, session.status)
-    info_sheet.cell(3, 1, "Created At")
-    info_sheet.cell(3, 2, session.created_at.isoformat() if session.created_at else "")
-    info_sheet.cell(4, 1, "Lowest MACO (mg)")
-    info_sheet.cell(4, 2, session.lowest_maco)
-    info_sheet.cell(5, 1, "Swab Limit (ppm)")
-    info_sheet.cell(5, 2, session.swab_limit_ppm)
-    info_sheet.cell(6, 1, "Rinse Limit (ppm)")
-    info_sheet.cell(6, 2, session.rinse_limit_ppm)
-    
-    # Swab Results Sheet
-    swab_sheet = workbook.create_sheet("Swab Results")
-    headers = ["Location", "Abs Sample", "Abs Std", "Result mg/ml", "Result ppm", "Reported"]
-    for col, header in enumerate(headers, 1):
-        cell = swab_sheet.cell(1, col, header)
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill(start_color="2d6a4f", end_color="2d6a4f", fill_type="solid")
-        cell.font = Font(color="FFFFFF", bold=True)
-    
-    for idx, result in enumerate(swab_results, 2):
-        swab_sheet.cell(idx, 1, result.location_name)
-        swab_sheet.cell(idx, 2, result.absorbance_sample)
-        swab_sheet.cell(idx, 3, result.absorbance_std)
-        swab_sheet.cell(idx, 4, result.result_mg_ml)
-        swab_sheet.cell(idx, 5, result.result_ppm)
-        swab_sheet.cell(idx, 6, result.reported)
-    
-    # Rinse Results Sheet
-    rinse_sheet = workbook.create_sheet("Rinse Results")
-    rinse_headers = ["Equipment", "Rinse Volume (L)", "Abs Sample", "Abs Std", "Result mg/ml", "Result ppm", "Reported"]
-    for col, header in enumerate(rinse_headers, 1):
-        cell = rinse_sheet.cell(1, col, header)
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill(start_color="2d6a4f", end_color="2d6a4f", fill_type="solid")
-        cell.font = Font(color="FFFFFF", bold=True)
-    
-    for idx, result in enumerate(rinse_results, 2):
-        rinse_sheet.cell(idx, 1, result.equipment_name)
-        rinse_sheet.cell(idx, 2, result.actual_rinse_volume)
-        rinse_sheet.cell(idx, 3, result.absorbance_sample)
-        rinse_sheet.cell(idx, 4, result.absorbance_std)
-        rinse_sheet.cell(idx, 5, result.result_mg_ml)
-        rinse_sheet.cell(idx, 6, result.result_ppm)
-        rinse_sheet.cell(idx, 7, result.reported)
-    
-    # Auto-adjust column widths
-    for sheet in [info_sheet, swab_sheet, rinse_sheet]:
-        for column in sheet.columns:
-            max_length = 0
-            column_letter = openpyxl.utils.get_column_letter(column[0].column)
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 30)
-            sheet.column_dimensions[column_letter].width = adjusted_width
-    
-    buffer = io.BytesIO()
-    workbook.save(buffer)
-    buffer.seek(0)
-    
-    return Response(
-        content=buffer.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=validation_data_{session.session_code}.xlsx"}
-    )
+    try:
+        from ..utils.excel_export import export_results_to_excel
+        
+        session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        buffer = export_results_to_excel(db, session_id)
+        
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=validation_data_{session.session_code}.xlsx"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Excel export failed for session {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Excel export failed: {str(e)}")
