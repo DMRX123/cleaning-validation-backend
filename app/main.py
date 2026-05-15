@@ -57,39 +57,91 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# ==================== CORS MIDDLEWARE (FIXED FOR PRODUCTION) ====================
-# For production - allow specific origins including Vercel
-ALLOWED_ORIGINS = [
+# ==================== CORS MIDDLEWARE (PRODUCTION READY) ====================
+# Get allowed origins from environment variable
+ALLOWED_ORIGINS = []
+
+# Default origins for development
+default_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:5173",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
-    "https://cleaning-validation-frontend.vercel.app",
-    "https://cleaning-validation.vercel.app",
 ]
 
-# Also check environment variable if set
+# Production origins (Vercel)
+production_origins = [
+    "https://cleaning-validation-frontend.vercel.app",
+    "https://cleaning-validation.vercel.app",
+    "https://cleaning-validation-frontend-git-main.vercel.app",
+]
+
+# Combine all origins
+ALLOWED_ORIGINS.extend(default_origins)
+ALLOWED_ORIGINS.extend(production_origins)
+
+# Also check environment variable if set (for Render deployment)
 env_origins = os.getenv("CORS_ORIGINS", "")
 if env_origins:
     for origin in env_origins.split(","):
-        if origin.strip():
-            ALLOWED_ORIGINS.append(origin.strip())
+        origin = origin.strip()
+        if origin and origin not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(origin)
 
 # Remove duplicates
 ALLOWED_ORIGINS = list(dict.fromkeys(ALLOWED_ORIGINS))
 
-logger.info(f"CORS allowed origins: {ALLOWED_ORIGINS}")
+logger.info("=" * 60)
+logger.info("CORS CONFIGURATION")
+logger.info(f"Allowed origins: {ALLOWED_ORIGINS}")
+logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
+logger.info("=" * 60)
 
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language",
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+    ],
+    expose_headers=[
+        "Content-Disposition",
+        "X-Process-Time",
+        "Access-Control-Allow-Origin",
+    ],
     max_age=3600,
 )
+
+# Add explicit OPTIONS handler for preflight requests
+@app.options("/api/{path:path}")
+@app.options("/api/{path:path}/{subpath:path}")
+async def options_handler(request: Request, path: str = "", subpath: str = ""):
+    """Handle CORS preflight requests"""
+    origin = request.headers.get("origin", "")
+    if origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS:
+        return JSONResponse(
+            status_code=200,
+            content={},
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                "Access-Control-Allow-Headers": "Accept, Accept-Language, Content-Language, Content-Type, Authorization, X-Requested-With",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    return JSONResponse(status_code=200, content={})
 
 # ==================== EXCEPTION HANDLERS ====================
 
@@ -215,7 +267,10 @@ def setup_database_on_startup():
 
 @app.on_event("startup")
 async def startup_event():
+    logger.info("=" * 60)
     logger.info("Starting up Cleaning Validation API...")
+    logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    logger.info(f"Debug mode: {os.getenv('DEBUG', 'True')}")
     try:
         init_db()
         logger.info("✅ Database tables ready")
@@ -224,7 +279,8 @@ async def startup_event():
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
         logger.info("📊 Total Endpoints: 61")
         logger.info("🔢 Total Calculations: 31")
-        logger.info(f"🌐 CORS enabled for: {ALLOWED_ORIGINS}")
+        logger.info(f"🌐 CORS enabled for {len(ALLOWED_ORIGINS)} origins")
+        logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
 
@@ -249,7 +305,8 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
-        "allowed_origins": ALLOWED_ORIGINS
+        "allowed_origins": ALLOWED_ORIGINS,
+        "environment": os.getenv("ENVIRONMENT", "development")
     }
 
 @app.get("/")
@@ -346,6 +403,6 @@ def api_info():
             "allowed_origins": ALLOWED_ORIGINS,
             "allow_credentials": True,
             "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-            "allow_headers": ["*"]
+            "allow_headers": ["Accept", "Accept-Language", "Content-Language", "Content-Type", "Authorization", "X-Requested-With"]
         }
     }
