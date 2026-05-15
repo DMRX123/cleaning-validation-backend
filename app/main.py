@@ -36,8 +36,50 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== MIDDLEWARE ====================
-# Add rate limiting middleware
+# ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
+# IMPORTANT: CORS middleware must be added BEFORE any other middleware
+# and BEFORE including routers
+
+# Define allowed origins
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "https://cleaning-validation-frontend.vercel.app",
+    "https://cleaning-validation.vercel.app",
+    "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
+]
+
+# Add any origins from environment variable
+env_origins = os.getenv("CORS_ORIGINS", "")
+if env_origins:
+    for origin in env_origins.split(","):
+        origin = origin.strip()
+        if origin and origin not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(origin)
+
+logger.info("=" * 60)
+logger.info("CORS CONFIGURATION")
+logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
+for origin in ALLOWED_ORIGINS:
+    logger.info(f"  - {origin}")
+logger.info("=" * 60)
+
+# Add CORS middleware - THIS MUST BE THE FIRST MIDDLEWARE
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
+)
+
+# ==================== OTHER MIDDLEWARE ====================
+# Add rate limiting middleware (after CORS)
 app.add_middleware(RateLimitMiddleware, calls=100, period=60)
 
 # Request logging middleware
@@ -56,66 +98,6 @@ async def log_requests(request: Request, call_next):
     
     response.headers["X-Process-Time"] = str(process_time)
     return response
-
-# ==================== CORS MIDDLEWARE (PRODUCTION READY) ====================
-# Get allowed origins from config
-ALLOWED_ORIGINS = config.get_cors_origins()
-
-logger.info("=" * 60)
-logger.info("CORS CONFIGURATION")
-logger.info(f"Environment: {config.ENVIRONMENT}")
-logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
-for origin in ALLOWED_ORIGINS:
-    logger.info(f"  - {origin}")
-logger.info("=" * 60)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=[
-        "Accept",
-        "Accept-Language",
-        "Content-Language",
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Origin",
-        "Access-Control-Request-Method",
-        "Access-Control-Request-Headers",
-    ],
-    expose_headers=[
-        "Content-Disposition",
-        "X-Process-Time",
-        "Access-Control-Allow-Origin",
-    ],
-    max_age=3600,
-)
-
-# Add explicit OPTIONS handler for preflight requests
-@app.options("/{full_path:path}")
-async def options_handler(request: Request, full_path: str = ""):
-    """Handle CORS preflight requests for all paths"""
-    origin = request.headers.get("origin", "")
-    
-    # Check if origin is allowed
-    is_allowed = origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS
-    
-    if is_allowed:
-        return JSONResponse(
-            status_code=200,
-            content={},
-            headers={
-                "Access-Control-Allow-Origin": origin if origin != "*" else "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-                "Access-Control-Allow-Headers": "Accept, Accept-Language, Content-Language, Content-Type, Authorization, X-Requested-With, Origin",
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Max-Age": "3600",
-            }
-        )
-    return JSONResponse(status_code=200, content={})
 
 # ==================== EXCEPTION HANDLERS ====================
 
@@ -319,55 +301,6 @@ def api_info():
         "version": config.API_VERSION,
         "description": config.API_DESCRIPTION,
         "status": "production_ready",
-        "guideline_compliance": {
-            "section_4.2.1": "ADE/PDE Calculation (NOAEL/LOAEL/LD50/TTC)",
-            "section_4.2.1.1": "ADE/PDE from Toxicology Data",
-            "section_4.2.1.3": "TTC (Threshold of Toxicological Concern)",
-            "section_4.2.2": "10 ppm General Limit",
-            "section_4.2.3": "Therapeutic Macromolecules (1/1000th dose)",
-            "section_4.2.4": "Swab Limits with Recovery & Equipment Segmentation",
-            "section_4.2.5": "Rinse Limits with Blank Correction",
-            "section_4.2.6": "Different Limits Rationale (Chemical vs Pharma)",
-            "section_5.0": "Levels of Cleaning (0,1,2) with Verification Requirements",
-            "section_6.0": "Cleaning Process Control (Parameters, Capability, Cpk)",
-            "section_7.0": "Bracketing & Worst Case Rating",
-            "section_7.4": "4-Criteria Worst Case Rating (Difficulty, Solubility, Toxicity, Dose)",
-            "section_8.1": "Microbiological Limits (Oral/Parenteral/Topical/Biotech/Inhalation)",
-            "section_8.2": "Analytical Validation (LOQ/LOD/Recovery)",
-            "section_8.3": "Sampling Methods (Swab/Rinse with Equations)",
-            "section_9.0": "Validation Protocol with Consecutive Success Tracking",
-            "section_9.7": "Dirty/Clean Hold Time Validation",
-            "section_10.0": "Revalidation & Change Control with FAQ Guidance"
-        },
-        "endpoints": {
-            "auth": "/api/auth",
-            "products": "/api/products",
-            "equipment": "/api/equipment",
-            "calculations": "/api/calculations",
-            "validation": "/api/validation",
-            "reports": "/api/reports",
-            "static": "/api/static",
-            "dashboard": "/api/dashboard",
-            "cleaning_validation": "/api/cleaning-validation",
-            "protocols": "/api/protocols",
-            "guidance": "/api/guidance",
-            "cleaning_process": "/api/cleaning-process",
-            "docs": "/docs",
-            "redoc": "/redoc",
-            "health": "/health"
-        },
-        "new_features": {
-            "ade_calculation": "Calculate ADE from NOAEL/LOAEL/LD50/TTC",
-            "worst_case_4_criteria": "Difficulty + Solubility + Toxicity + Dose rating",
-            "swab_segmentation": "Equipment area-wise swab limits with total carry-over",
-            "rinse_blank_correction": "CO = V x (C - Cb)",
-            "consecutive_success_tracking": "3 consecutive passes required for validation",
-            "level_based_requirements": "Dynamic testing requirements per cleaning level",
-            "guidance_faq": "APIC Section 10.0 validation questions with answers",
-            "revalidation_assessment": "Change control based revalidation check",
-            "process_capability": "Cpk calculation and risk assessment (Section 6.0)",
-            "parameter_tracking": "Temperature, Flow, Pressure, Duration monitoring"
-        },
         "statistics": {
             "total_endpoints": 61,
             "total_calculations": 31,
@@ -377,8 +310,7 @@ def api_info():
         "cors_configuration": {
             "allowed_origins": ALLOWED_ORIGINS,
             "allow_credentials": True,
-            "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-            "allow_headers": ["Accept", "Accept-Language", "Content-Language", "Content-Type", "Authorization", "X-Requested-With"]
+            "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
         },
         "environment": config.ENVIRONMENT
     }
