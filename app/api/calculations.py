@@ -37,11 +37,11 @@ def calculate_maco(request: MACORequest, db: Session = Depends(get_db)):
     
     result = MACOService.calculate_all(previous, next_product)
     return {
-        "method_10ppm": result.get("method_10ppm", 0),
-        "method_tdd": result.get("method_tdd", 0),
-        "method_ade_pde": result.get("method_ade_pde", 0),
-        "method_ttc": result.get("method_ttc", 0),
-        "lowest_maco": result.get("lowest_maco", 0)
+        "method_10ppm": float(result.get("method_10ppm", 0)),
+        "method_tdd": float(result.get("method_tdd", 0)),
+        "method_ade_pde": float(result.get("method_ade_pde", 0)),
+        "method_ttc": float(result.get("method_ttc", 0)),
+        "lowest_maco": float(result.get("lowest_maco", 0))
     }
 
 @router.post("/swab-limit")
@@ -82,13 +82,13 @@ def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db
     )
     
     return {
-        "mg_per_swab": mg_per_swab,
-        "ppm": ppm
+        "mg_per_swab": float(mg_per_swab) if mg_per_swab is not None else 0.0,
+        "ppm": float(ppm) if ppm is not None else 0.0
     }
 
 @router.post("/rinse-limit")
 def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_db)):
-    """Calculate rinse limit for equipment"""
+    """Calculate rinse limit for equipment - ALL VALUES AS NUMBERS"""
     # Get session
     session = db.query(ValidationSession).filter(ValidationSession.id == request.session_id).first()
     if not session:
@@ -145,13 +145,14 @@ def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_
         equipment_surface_area_m2=equipment.surface_area
     )
     
+    # ENSURE ALL VALUES ARE NUMBERS (float) - CRITICAL FOR FRONTEND toFixed()
     return {
-        "limit_mg": limit_mg,
-        "limit_ppm": limit_ppm,
-        "volume_loq": volume_loq,
-        "volume_10ppm": volume_10ppm,
-        "volume_amv": volume_amv,
-        "maco_mg": maco_mg
+        "limit_mg": float(limit_mg) if limit_mg is not None else 0.0,
+        "limit_ppm": float(limit_ppm) if limit_ppm is not None else 0.0,
+        "volume_loq": float(volume_loq) if volume_loq is not None else 0.0,
+        "volume_10ppm": float(volume_10ppm) if volume_10ppm is not None else 0.0,
+        "volume_amv": float(volume_amv) if volume_amv is not None else 0.0,
+        "maco_mg": float(maco_mg) if maco_mg is not None else 0.0
     }
 
 @router.post("/worst-case")
