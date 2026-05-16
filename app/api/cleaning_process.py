@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from ..database import get_db
-from .auth import get_current_user  # CHANGED
+from .auth import get_current_user
 from ..models.user import User
 from ..services.cleaning_process_service import CleaningProcessService
 from ..services.cleaning_capability_service import CleaningCapabilityService
@@ -13,6 +13,23 @@ from ..schemas.cleaning_process import (
 )
 
 router = APIRouter(prefix="/cleaning-process", tags=["Cleaning Process Control"])
+
+# ============================================
+# GET ALL CLEANING PROCESSES - ADDED
+# ============================================
+
+@router.get("/")
+def get_cleaning_processes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Section 6.0 - Get all cleaning processes
+    Returns list of all active cleaning processes
+    """
+    from ..models.cleaning_process import CleaningProcess
+    processes = db.query(CleaningProcess).filter(CleaningProcess.is_active == True).all()
+    return processes
 
 # ============================================
 # CLEANING PROCESS DEFINITION
