@@ -7,7 +7,7 @@ from ..models.equipment import Equipment
 from ..services.maco import MACOService
 from ..services.swab import SwabService
 from ..services.rinse import RinseService
-from ..services.worst_case import WorstCaseService
+from ..services.worst_case_service import WorstCaseService  # CHANGED: from worst_case to worst_case_service
 from ..services.equipment_filter import EquipmentFilterService
 from pydantic import BaseModel
 import logging
@@ -175,8 +175,16 @@ def find_worst_case(plant: str = None, db: Session = Depends(get_db)):
         query = query.filter(Product.plant == plant)
     
     products = query.all()
-    worst_case = WorstCaseService.find_worst_case(products)
+    
+    # Use the correct WorstCaseService
+    worst_case = WorstCaseService.select_worst_case(products)
     
     if worst_case:
-        return {"id": worst_case.id, "name": worst_case.name, "solubility": worst_case.solubility}
+        return {
+            "id": worst_case.id, 
+            "name": worst_case.name, 
+            "solubility": worst_case.solubility,
+            "hardest_to_clean": worst_case.hardest_to_clean,
+            "ade_pde": worst_case.ade_pde
+        }
     return {"message": "No products found"}

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..api.dependencies import get_current_user
+from .auth import get_current_user  # CHANGED
 from ..services.guidance_service import GuidanceService
 from ..schemas.guidance import GuidanceQuestionResponse, RevalidationCheckRequest, RevalidationCheckResponse
 from typing import List

@@ -29,13 +29,8 @@ class MACOService:
     @staticmethod
     def method_ade_pde(previous_product: Product, next_product: Product,
                        purging_factor: float = 1.0, safety_factor: float = 1.0) -> float:
-        """
-        Section 4.2.1 - Health-Based Data (HBEL/ADE/PDE)
-        purging_factor must be >= 0.1 (cannot be zero)
-        """
-        # Validate purging factor
         if purging_factor <= 0:
-            purging_factor = 1.0  # Default safe value
+            purging_factor = 1.0
         
         if previous_product and next_product:
             ade_pde_mg = previous_product.ade_pde / 1000
@@ -63,8 +58,6 @@ class MACOService:
     @staticmethod
     def calculate_all(previous_product: Product, next_product: Product,
                       purging_factor: float = 1.0, safety_factor: float = 1.0) -> dict:
-        """Calculate all methods and return lowest MACO"""
-        # Ensure purging_factor is valid (not zero or negative)
         if purging_factor <= 0:
             purging_factor = 1.0
         

@@ -37,10 +37,6 @@ app = FastAPI(
 )
 
 # ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
-# IMPORTANT: CORS middleware must be added BEFORE any other middleware
-# and BEFORE including routers
-
-# Define allowed origins
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -52,7 +48,6 @@ ALLOWED_ORIGINS = [
     "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
 ]
 
-# Add any origins from environment variable
 env_origins = os.getenv("CORS_ORIGINS", "")
 if env_origins:
     for origin in env_origins.split(","):
@@ -67,7 +62,6 @@ for origin in ALLOWED_ORIGINS:
     logger.info(f"  - {origin}")
 logger.info("=" * 60)
 
-# Add CORS middleware - THIS MUST BE THE FIRST MIDDLEWARE
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -78,29 +72,25 @@ app.add_middleware(
     max_age=3600,
 )
 
-# ==================== OTHER MIDDLEWARE ====================
-# Add rate limiting middleware (after CORS)
+# ==================== RATE LIMITING MIDDLEWARE (FIXED - ADDED) ====================
 app.add_middleware(RateLimitMiddleware, calls=100, period=60)
+logger.info("✅ Rate limiting middleware enabled (100 requests per 60 seconds)")
 
-# Request logging middleware
+# ==================== REQUEST LOGGING MIDDLEWARE ====================
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
-    
     response = await call_next(request)
-    
     process_time = (datetime.now() - start_time).total_seconds()
     logger.info(
         f"{request.method} {request.url.path} - "
         f"Status: {response.status_code} - "
         f"Time: {process_time:.3f}s"
     )
-    
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
 # ==================== EXCEPTION HANDLERS ====================
-
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
@@ -138,22 +128,17 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # ==================== AUTO DATABASE SETUP FUNCTION ====================
-
 def setup_database_on_startup():
-    """Auto-create tables, seed data, and create admin user on first startup"""
     try:
         from app.database import SessionLocal
         from app.services.auth import AuthService
         from app.models.user import User
         
         db = SessionLocal()
-        
         try:
             user_count = db.query(User).count()
-            
             if user_count == 0:
                 logger.info("📦 Database is empty. Running initial setup...")
-                
                 admin = User(
                     username='admin',
                     email='admin@cleaning-validation.com',
@@ -165,7 +150,6 @@ def setup_database_on_startup():
                 db.commit()
                 logger.info("✅ Admin user created: admin / Admin@123")
                 
-                # Create default cleaning levels if not exist
                 try:
                     from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
                     existing_levels = db.query(CleaningLevel).count()
@@ -210,17 +194,14 @@ def setup_database_on_startup():
                     logger.warning(f"⚠️ Could not run seed script: {e}")
             else:
                 logger.info(f"✅ Database already has {user_count} users. Skipping setup.")
-                
         except Exception as e:
             logger.warning(f"⚠️ Setup check warning: {e}")
         finally:
             db.close()
-            
     except Exception as e:
         logger.error(f"❌ Auto-setup error: {e}")
 
 # ==================== LIFESPAN EVENTS ====================
-
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 60)
@@ -237,6 +218,7 @@ async def startup_event():
         logger.info("📊 Total Endpoints: 61")
         logger.info("🔢 Total Calculations: 31")
         logger.info(f"🌐 CORS enabled for {len(ALLOWED_ORIGINS)} origins")
+        logger.info("⏱️ Rate limiting: 100 requests per minute")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
@@ -246,7 +228,6 @@ async def shutdown_event():
     logger.info("Shutting down Cleaning Validation API...")
 
 # ==================== HEALTH & ROOT ENDPOINTS ====================
-
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     db_status = "healthy"
@@ -262,6 +243,7 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
+        "rate_limiting_enabled": True,
         "allowed_origins": ALLOWED_ORIGINS,
         "environment": config.ENVIRONMENT
     }
@@ -278,7 +260,6 @@ def root():
     }
 
 # ==================== ROUTERS ====================
-
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
 app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"])
@@ -293,7 +274,6 @@ app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 
 # ==================== API INFO ENDPOINT ====================
-
 @app.get("/api/info")
 def api_info():
     return {
@@ -311,6 +291,11 @@ def api_info():
             "allowed_origins": ALLOWED_ORIGINS,
             "allow_credentials": True,
             "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+        },
+        "rate_limiting": {
+            "enabled": True,
+            "calls_per_minute": 100,
+            "period_seconds": 60
         },
         "environment": config.ENVIRONMENT
     }

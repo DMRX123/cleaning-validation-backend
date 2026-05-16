@@ -27,9 +27,6 @@ class RinseService:
     
     @staticmethod
     def calculate_volume_by_loq(limit_mg: float, loq_ppm: float):
-        """
-        Returns volume with warning if volume is impractically large
-        """
         if loq_ppm is None or loq_ppm <= 0:
             return {"volume_l": 0.0, "warning": None}
         if limit_mg is None or limit_mg <= 0:
@@ -68,16 +65,6 @@ class RinseService:
         return round(volume_l, 2)
     
     @staticmethod
-    def calculate_volume_by_loq_recovery(limit_mg: float, loq_ppm: float) -> float:
-        if loq_ppm is None or loq_ppm <= 0:
-            return 0.0
-        if limit_mg is None or limit_mg <= 0:
-            return 0.0
-        
-        volume_l = float(limit_mg) / float(loq_ppm)
-        return round(volume_l, 2)
-    
-    @staticmethod
     def check_acceptability(actual_ppm: float, limit_ppm: float, volume_l: float, 
                            volume_limit_l: float, loq_ppm: float) -> dict:
         conditions = [
@@ -101,10 +88,6 @@ class RinseService:
     def calculate_carry_over_with_blank(concentration_mg_per_l: float, 
                                          volume_l: float,
                                          blank_mg_per_l: float = 0.0) -> dict:
-        """
-        Section 4.2.5 - Equation 5
-        CO = V x (C - Cb)
-        """
         if volume_l is None or volume_l <= 0:
             return {
                 "carry_over_mg": 0,

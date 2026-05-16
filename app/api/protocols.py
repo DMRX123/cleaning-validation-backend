@@ -10,6 +10,9 @@ from ..models.equipment import Equipment
 from ..models.product import Product
 from ..services.protocol_service import ProtocolService
 import io
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/protocols", tags=["Protocols"])
 
@@ -40,21 +43,27 @@ def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db
     if not previous or not next_product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    protocol = ProtocolService.create_protocol(
-        db,
-        request.equipment_id,
-        request.previous_product_id,
-        request.next_product_id,
-        request.cleaning_procedure_id,
-        request.prepared_by
-    )
-    return {
-        "id": protocol.id,
-        "protocol_number": protocol.protocol_number,
-        "title": protocol.title,
-        "status": protocol.status,
-        "message": "Protocol created successfully"
-    }
+    try:
+        protocol = ProtocolService.create_protocol(
+            db,
+            request.equipment_id,
+            request.previous_product_id,
+            request.next_product_id,
+            request.cleaning_procedure_id,
+            request.prepared_by
+        )
+        return {
+            "id": protocol.id,
+            "protocol_number": protocol.protocol_number,
+            "title": protocol.title,
+            "status": protocol.status,
+            "message": "Protocol created successfully"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Protocol creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create protocol: {str(e)}")
 
 @router.get("/{protocol_id}")
 def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
@@ -75,124 +84,134 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
     
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
-    styles = getSampleStyleSheet()
+    # Validate required fields before PDF generation
+    equipment = db.query(Equipment).filter(Equipment.id == protocol.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=400, detail=f"Equipment not found for protocol {protocol_id}")
     
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=30, textColor=colors.HexColor('#1a472a'))
-    heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=12, spaceAfter=12, textColor=colors.HexColor('#2d6a4f'))
-    normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10)
+    previous = db.query(Product).filter(Product.id == protocol.previous_product_id).first()
+    if not previous:
+        raise HTTPException(status_code=400, detail=f"Previous product not found for protocol {protocol_id}")
     
-    story = []
-    
-    story.append(Paragraph(f"Cleaning Validation Protocol", title_style))
-    story.append(Paragraph(f"Protocol Number: {protocol.protocol_number}", normal_style))
-    story.append(Paragraph(f"Version: {protocol.version}", normal_style))
-    story.append(Paragraph(f"Status: {protocol.status}", normal_style))
-    story.append(Spacer(1, 20))
-    
-    approval_data = [
-        ["Prepared By:", protocol.prepared_by or "Not specified", "Date:", protocol.prepared_date.strftime('%Y-%m-%d') if protocol.prepared_date else "Not specified"],
-        ["Reviewed By:", protocol.reviewed_by or "Pending", "Date:", protocol.reviewed_date.strftime('%Y-%m-%d') if protocol.reviewed_date else "Pending"],
-        ["Approved By:", protocol.approved_by or "Pending", "Date:", protocol.approved_date.strftime('%Y-%m-%d') if protocol.approved_date else "Pending"],
-    ]
-    approval_table = Table(approval_data, colWidths=[1.5*inch, 2*inch, 1*inch, 2*inch])
-    approval_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    story.append(approval_table)
-    story.append(Spacer(1, 20))
-    
-    story.append(Paragraph("1.0 BACKGROUND", heading_style))
-    story.append(Paragraph(protocol.background or "Not specified", normal_style))
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("2.0 PURPOSE", heading_style))
-    story.append(Paragraph(protocol.purpose or "Not specified", normal_style))
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("3.0 SCOPE", heading_style))
-    story.append(Paragraph(protocol.scope or "Not specified", normal_style))
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("4.0 EQUIPMENT INFORMATION", heading_style))
-    equipment_data = [
-        ["Equipment ID", "Cleaning Procedure", "Visual Acceptance"],
-        [protocol.equipment_id or "N/A", protocol.cleaning_procedure_id or "N/A", protocol.visual_acceptance],
-    ]
-    equipment_table = Table(equipment_data, colWidths=[2*inch, 2*inch, 3*inch])
-    equipment_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    story.append(equipment_table)
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("5.0 ACCEPTANCE CRITERIA", heading_style))
-    criteria_data = [
-        ["Parameter", "Acceptance Criteria"],
-        ["Visual Inspection", protocol.visual_acceptance],
-        ["Chemical Residue", f"≤ {protocol.chemical_acceptance_ppm} ppm" if protocol.chemical_acceptance_ppm else "Not specified"],
-        ["Microbiological", f"≤ {protocol.microbiological_acceptance} CFU/dm²" if protocol.microbiological_acceptance else "Not specified"],
-    ]
-    criteria_table = Table(criteria_data, colWidths=[2.5*inch, 4.5*inch])
-    criteria_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    story.append(criteria_table)
-    story.append(Spacer(1, 12))
-    
-    story.append(Paragraph("6.0 HOLD TIMES", heading_style))
-    hold_data = [
-        ["Parameter", "Validated Time"],
-        ["Dirty Hold Time (DHT)", f"{protocol.dirty_hold_time_hours} hours" if protocol.dirty_hold_time_hours else "Not specified"],
-        ["Clean Hold Time (CHT)", f"{protocol.clean_hold_time_hours} hours" if protocol.clean_hold_time_hours else "Not specified"],
-    ]
-    hold_table = Table(hold_data, colWidths=[2.5*inch, 4.5*inch])
-    hold_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    story.append(hold_table)
-    
-    doc.build(story)
-    buffer.seek(0)
-    
-    return Response(
-        content=buffer.getvalue(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=validation_protocol_{protocol.protocol_number}.pdf"}
-    )
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=16, spaceAfter=30, textColor=colors.HexColor('#1a472a'))
+        heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontSize=12, spaceAfter=12, textColor=colors.HexColor('#2d6a4f'))
+        normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontSize=10)
+        
+        story = []
+        
+        story.append(Paragraph(f"Cleaning Validation Protocol", title_style))
+        story.append(Paragraph(f"Protocol Number: {protocol.protocol_number}", normal_style))
+        story.append(Paragraph(f"Version: {protocol.version}", normal_style))
+        story.append(Paragraph(f"Status: {protocol.status}", normal_style))
+        story.append(Spacer(1, 20))
+        
+        approval_data = [
+            ["Prepared By:", protocol.prepared_by or "Not specified", "Date:", protocol.prepared_date.strftime('%Y-%m-%d') if protocol.prepared_date else "Not specified"],
+            ["Reviewed By:", protocol.reviewed_by or "Pending", "Date:", protocol.reviewed_date.strftime('%Y-%m-%d') if protocol.reviewed_date else "Pending"],
+            ["Approved By:", protocol.approved_by or "Pending", "Date:", protocol.approved_date.strftime('%Y-%m-%d') if protocol.approved_date else "Pending"],
+        ]
+        approval_table = Table(approval_data, colWidths=[1.5*inch, 2*inch, 1*inch, 2*inch])
+        approval_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(approval_table)
+        story.append(Spacer(1, 20))
+        
+        story.append(Paragraph("1.0 BACKGROUND", heading_style))
+        story.append(Paragraph(protocol.background or "Not specified", normal_style))
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph("2.0 PURPOSE", heading_style))
+        story.append(Paragraph(protocol.purpose or "Not specified", normal_style))
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph("3.0 SCOPE", heading_style))
+        story.append(Paragraph(protocol.scope or "Not specified", normal_style))
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph("4.0 EQUIPMENT INFORMATION", heading_style))
+        equipment_data = [
+            ["Equipment ID", "Cleaning Procedure", "Visual Acceptance"],
+            [equipment.name or "N/A", protocol.cleaning_procedure_id or "N/A", protocol.visual_acceptance],
+        ]
+        equipment_table = Table(equipment_data, colWidths=[2*inch, 2*inch, 3*inch])
+        equipment_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(equipment_table)
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph("5.0 ACCEPTANCE CRITERIA", heading_style))
+        criteria_data = [
+            ["Parameter", "Acceptance Criteria"],
+            ["Visual Inspection", protocol.visual_acceptance],
+            ["Chemical Residue", f"≤ {protocol.chemical_acceptance_ppm} ppm" if protocol.chemical_acceptance_ppm else "Not specified"],
+            ["Microbiological", f"≤ {protocol.microbiological_acceptance} CFU/dm²" if protocol.microbiological_acceptance else "Not specified"],
+        ]
+        criteria_table = Table(criteria_data, colWidths=[2.5*inch, 4.5*inch])
+        criteria_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(criteria_table)
+        story.append(Spacer(1, 12))
+        
+        story.append(Paragraph("6.0 HOLD TIMES", heading_style))
+        hold_data = [
+            ["Parameter", "Validated Time"],
+            ["Dirty Hold Time (DHT)", f"{protocol.dirty_hold_time_hours} hours" if protocol.dirty_hold_time_hours else "Not specified"],
+            ["Clean Hold Time (CHT)", f"{protocol.clean_hold_time_hours} hours" if protocol.clean_hold_time_hours else "Not specified"],
+        ]
+        hold_table = Table(hold_data, colWidths=[2.5*inch, 4.5*inch])
+        hold_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(hold_table)
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=validation_protocol_{protocol.protocol_number}.pdf"}
+        )
+    except Exception as e:
+        logger.error(f"PDF generation error for protocol {protocol_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 @router.post("/execute")
 def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_db)):
-    """Section 9.0 - Execute protocol and record results with full PASS/FAIL logic"""
     protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == request.protocol_id).first()
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
     
-    # Determine overall result - INCLUDES MICROBIOLOGICAL RESULT
     chemical_pass = request.chemical_result_ppm <= (protocol.chemical_acceptance_ppm or 999999)
     visual_pass = request.visual_result == "PASS"
     
-    # Microbiological check
     microbiological_pass = True
     if protocol.microbiological_acceptance and request.microbiological_result is not None:
         microbiological_pass = request.microbiological_result <= protocol.microbiological_acceptance
     elif protocol.microbiological_acceptance and request.microbiological_result is None:
-        microbiological_pass = False  # Missing required microbiological result
+        microbiological_pass = False
     
     overall = "PASS" if (visual_pass and chemical_pass and microbiological_pass) else "FAIL"
     

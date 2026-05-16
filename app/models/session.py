@@ -17,8 +17,9 @@ class ValidationSession(Base):
     previous_product_id = Column(Integer, ForeignKey("products.id"))
     next_product_id = Column(Integer, ForeignKey("products.id"))
     
-    previous_product = relationship("Product", foreign_keys=[previous_product_id], overlaps="sessions_as_previous,sessions_as_next")
-    next_product = relationship("Product", foreign_keys=[next_product_id], overlaps="sessions_as_previous,sessions_as_next")
+    # FIXED: Removed 'overlaps' parameter
+    previous_product = relationship("Product", foreign_keys=[previous_product_id])
+    next_product = relationship("Product", foreign_keys=[next_product_id])
     
     maco_10ppm = Column(Float, nullable=True)
     maco_tdd = Column(Float, nullable=True)

@@ -12,7 +12,7 @@ from ..services.rinse import RinseService
 from ..services.acceptability import AcceptabilityService
 from ..services.extra_area import ExtraAreaService
 from ..services.equipment_filter import EquipmentFilterService
-from .auth import get_current_user
+from .auth import get_current_user  # CHANGED
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -89,7 +89,7 @@ def update_session(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Update validation session - FIXED: Added this endpoint"""
+    """Update validation session"""
     session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -145,10 +145,7 @@ def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)
 
 @router.post("/swab-result")
 def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
-    """
-    Create swab result with proper numeric handling
-    result_ppm is ALWAYS a number (0 if below LOQ) - safe for frontend toFixed()
-    """
+    """Create swab result with proper numeric handling"""
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
     
@@ -195,10 +192,7 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
 
 @router.post("/rinse-result")
 def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
-    """
-    Create rinse result with proper numeric handling
-    result_ppm is ALWAYS a number (0 if below LOQ) - safe for frontend toFixed()
-    """
+    """Create rinse result with proper numeric handling"""
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
     

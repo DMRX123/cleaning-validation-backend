@@ -1,4 +1,3 @@
-# app/api/reports.py - COMPLETE FIXED VERSION
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response, JSONResponse
 from sqlalchemy.orm import Session
@@ -10,7 +9,7 @@ from ..models.session_equipment import SessionEquipment
 from ..models.product import Product
 from ..models.equipment import Equipment
 from ..services.report import ReportService
-from ..api.dependencies import get_current_user
+from .auth import get_current_user  # CHANGED
 import logging
 import traceback
 
@@ -41,14 +40,10 @@ def generate_report(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """
-    Generate PDF report for validation session
-    Handles missing data gracefully
-    """
+    """Generate PDF report for validation session"""
     try:
         logger.info(f"Generating PDF report for session {session_id}")
         
-        # Get session
         session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
         if not session:
             logger.error(f"Session {session_id} not found")
@@ -56,15 +51,12 @@ def generate_report(
         
         logger.info(f"Session found: {session.session_code}")
         
-        # Get swab results
         swab_results = db.query(SwabResult).filter(SwabResult.session_id == session_id).all()
         logger.info(f"Found {len(swab_results)} swab results")
         
-        # Get rinse results
         rinse_results = db.query(RinseResult).filter(RinseResult.session_id == session_id).all()
         logger.info(f"Found {len(rinse_results)} rinse results")
         
-        # Get equipment list for this session
         session_equipment = db.query(SessionEquipment).filter(SessionEquipment.session_id == session_id).all()
         equipment_list = []
         for se in session_equipment:
@@ -72,7 +64,6 @@ def generate_report(
                 equipment_list.append(se.equipment)
         logger.info(f"Found {len(equipment_list)} equipment items")
         
-        # Build MACO data with safe values
         maco_data = {
             "10ppm": safe_value(session.maco_10ppm, 0),
             "tdd": safe_value(session.maco_tdd, 0),
@@ -81,7 +72,6 @@ def generate_report(
         }
         logger.info(f"MACO data: {maco_data}")
         
-        # Generate PDF
         pdf_content = ReportService.generate_validation_report(
             session, swab_results, rinse_results, maco_data, equipment_list
         )

@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional, List
 from ..database import get_db
-from ..api.dependencies import get_current_user
+from .auth import get_current_user  # CHANGED
 from ..models.cleaning_level import CleaningLevelEnum
 from ..models.product import Product
 from ..models.equipment import Equipment

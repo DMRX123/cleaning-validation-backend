@@ -5,7 +5,7 @@ from ..database import get_db
 from ..models.equipment import Equipment
 from ..schemas.equipment import EquipmentCreate, EquipmentUpdate, EquipmentResponse
 from ..services.audit import AuditService
-from ..api.dependencies import get_current_user
+from .auth import get_current_user  # CHANGED: from ..api.dependencies to .auth
 
 router = APIRouter()
 

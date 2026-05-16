@@ -1,5 +1,3 @@
-# app/api/dashboard.py - COMPLETE WORKING VERSION
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -8,6 +6,7 @@ from ..models.product import Product
 from ..models.equipment import Equipment
 from ..models.session import ValidationSession
 from ..models.audit_log import AuditLog
+from .auth import get_current_user  # CHANGED
 from datetime import datetime, timedelta
 import logging
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get dashboard statistics with proper error handling"""
     try:
         # Simple counts that should always work
@@ -42,7 +41,6 @@ def get_stats(db: Session = Depends(get_db)):
         else:
             pass_rate = 0
         
-        # Simple response without trends (avoid created_at issues)
         return {
             "success": True,
             "data": {
@@ -81,7 +79,7 @@ def get_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/recent-activity")
-def get_recent_activity(limit: int = 10, db: Session = Depends(get_db)):
+def get_recent_activity(limit: int = 10, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     """Get recent activity logs"""
     try:
         recent_audits = db.query(AuditLog).order_by(
