@@ -14,7 +14,7 @@ from .api import auth
 from .api import (
     products, equipment, calculations, validation, 
     reports, static_data, dashboard, cleaning_validation, 
-    protocols, guidance, cleaning_process
+    protocols, guidance, cleaning_process, training
 )
 from .database import init_db, get_db
 from .config import config
@@ -46,6 +46,8 @@ ALLOWED_ORIGINS = [
     "https://cleaning-validation-frontend.vercel.app",
     "https://cleaning-validation.vercel.app",
     "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
+    "https://cleaning-validation-frontend-git-main.vercel.app",
+    "https://*.vercel.app"
 ]
 
 env_origins = os.getenv("CORS_ORIGINS", "")
@@ -72,7 +74,7 @@ app.add_middleware(
     max_age=3600,
 )
 
-# ==================== RATE LIMITING MIDDLEWARE (FIXED - ADDED) ====================
+# ==================== RATE LIMITING MIDDLEWARE ====================
 app.add_middleware(RateLimitMiddleware, calls=100, period=60)
 logger.info("✅ Rate limiting middleware enabled (100 requests per 60 seconds)")
 
@@ -136,7 +138,10 @@ def setup_database_on_startup():
         
         db = SessionLocal()
         try:
+            # Check if users table exists and has users
             user_count = db.query(User).count()
+            logger.info(f"Found {user_count} users in database")
+            
             if user_count == 0:
                 logger.info("📦 Database is empty. Running initial setup...")
                 admin = User(
@@ -150,6 +155,7 @@ def setup_database_on_startup():
                 db.commit()
                 logger.info("✅ Admin user created: admin / Admin@123")
                 
+                # Create cleaning levels
                 try:
                     from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
                     existing_levels = db.query(CleaningLevel).count()
@@ -178,6 +184,7 @@ def setup_database_on_startup():
                 except Exception as e:
                     logger.warning(f"⚠️ Could not create cleaning levels: {e}")
                 
+                # Seed static data
                 try:
                     seed_script = os.path.join(os.path.dirname(__file__), "..", "scripts", "seed_static_data.py")
                     if os.path.exists(seed_script):
@@ -193,13 +200,18 @@ def setup_database_on_startup():
                 except Exception as e:
                     logger.warning(f"⚠️ Could not run seed script: {e}")
             else:
-                logger.info(f"✅ Database already has {user_count} users. Skipping setup.")
+                logger.info(f"✅ Database already has {user_count} users.")
+                
         except Exception as e:
             logger.warning(f"⚠️ Setup check warning: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             db.close()
     except Exception as e:
         logger.error(f"❌ Auto-setup error: {e}")
+        import traceback
+        traceback.print_exc()
 
 # ==================== LIFESPAN EVENTS ====================
 @app.on_event("startup")
@@ -215,13 +227,15 @@ async def startup_event():
         setup_database_on_startup()
         logger.info("🚀 Cleaning Validation API is ready!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("📊 Total Endpoints: 61")
+        logger.info("📊 Total Endpoints: 61+")
         logger.info("🔢 Total Calculations: 31")
         logger.info(f"🌐 CORS enabled for {len(ALLOWED_ORIGINS)} origins")
         logger.info("⏱️ Rate limiting: 100 requests per minute")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -272,6 +286,7 @@ app.include_router(cleaning_validation.router, prefix="/api/cleaning-validation"
 app.include_router(protocols.router, prefix="/api/protocols", tags=["Validation Protocols"])
 app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance"])
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
+app.include_router(training.router, prefix="/api/training", tags=["Training"])
 
 # ==================== API INFO ENDPOINT ====================
 @app.get("/api/info")
@@ -282,7 +297,7 @@ def api_info():
         "description": config.API_DESCRIPTION,
         "status": "production_ready",
         "statistics": {
-            "total_endpoints": 61,
+            "total_endpoints": 65,
             "total_calculations": 31,
             "total_models": 28,
             "apic_sections_covered": "30/30 (100%)"
