@@ -12,10 +12,10 @@ from ..schemas.cleaning_process import (
     CleaningCapabilityRequest, CleaningCapabilityResponse
 )
 
-router = APIRouter(prefix="/cleaning-process", tags=["Cleaning Process Control"])
+router = APIRouter(tags=["Cleaning Process Control"])
 
 # ============================================
-# GET ALL CLEANING PROCESSES - ADDED
+# GET ALL CLEANING PROCESSES
 # ============================================
 
 @router.get("/")
@@ -23,10 +23,6 @@ def get_cleaning_processes(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Get all cleaning processes
-    Returns list of all active cleaning processes
-    """
     from ..models.cleaning_process import CleaningProcess
     processes = db.query(CleaningProcess).filter(CleaningProcess.is_active == True).all()
     return processes
@@ -41,10 +37,6 @@ def create_cleaning_process(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Create a new cleaning process definition
-    Includes system boundaries, cleaning agents, process steps
-    """
     try:
         process = CleaningProcessService.create_process(db, process_data)
         return process
@@ -57,9 +49,6 @@ def get_cleaning_process(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Get complete cleaning process with parameters and executions
-    """
     result = CleaningProcessService.get_process_with_parameters(db, process_id)
     if not result:
         raise HTTPException(status_code=404, detail="Process not found")
@@ -76,10 +65,6 @@ def add_cleaning_parameter(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Add critical parameters to cleaning process
-    (Temperature, Flow rate, Pressure, Duration, Concentration)
-    """
     try:
         parameter = CleaningProcessService.add_parameter(db, process_id, param_data)
         return {
@@ -103,15 +88,9 @@ def record_cleaning_execution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Record actual cleaning execution parameters
-    Validates against defined specifications
-    """
     try:
         execution = CleaningProcessService.record_execution(db, execution_data)
-        
         status = "PASS" if execution.all_parameters_acceptable else "FAIL"
-        
         return {
             "success": True,
             "execution_id": execution.id,
@@ -139,18 +118,11 @@ def analyze_process_capability(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Analyze cleaning process capability
-    Calculates mean, spread, Cpk, and distance from MACO
-    Determines if process is adequately controlled
-    """
     result = CleaningCapabilityService.calculate_process_capability(
         db, request.process_id, request.historical_executions_count
     )
-    
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
-    
     return result
 
 # ============================================
@@ -164,15 +136,10 @@ def get_process_executions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Get execution history for a cleaning process
-    """
     from ..models.cleaning_process import CleaningExecution
-    
     executions = db.query(CleaningExecution).filter(
         CleaningExecution.process_id == process_id
     ).order_by(CleaningExecution.execution_date.desc()).limit(limit).all()
-    
     return {
         "process_id": process_id,
         "total_executions": db.query(CleaningExecution).filter(CleaningExecution.process_id == process_id).count(),
@@ -203,22 +170,15 @@ def validate_cleaning_process(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Section 6.0 - Mark cleaning process as validated after successful qualification
-    """
     from ..models.cleaning_process import CleaningProcess
     from datetime import datetime
-    
     process = db.query(CleaningProcess).filter(CleaningProcess.id == process_id).first()
     if not process:
         raise HTTPException(status_code=404, detail="Process not found")
-    
     process.is_validated = True
     process.validation_protocol_id = validation_protocol_id
     process.validation_date = datetime.now()
-    
     db.commit()
-    
     return {
         "success": True,
         "process_id": process_id,

@@ -14,7 +14,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/protocols", tags=["Protocols"])
+router = APIRouter(tags=["Validation Protocols"])
 
 class CreateProtocolRequest(BaseModel):
     equipment_id: int
@@ -84,7 +84,6 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
     
-    # Validate required fields before PDF generation
     equipment = db.query(Equipment).filter(Equipment.id == protocol.equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=400, detail=f"Equipment not found for protocol {protocol_id}")
@@ -235,11 +234,9 @@ def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_
     
     if existing_results + 1 >= 3:
         protocol.status = "EXECUTED"
-        
         all_results = db.query(ProtocolExecutionResult).filter(
             ProtocolExecutionResult.protocol_id == request.protocol_id
         ).all()
-        
         all_passed = all(r.overall_result == "PASS" for r in all_results) and overall == "PASS"
         if all_passed:
             protocol.status = "APPROVED"
@@ -264,11 +261,9 @@ def get_protocol_results(protocol_id: int, db: Session = Depends(get_db)):
     protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
     if not protocol:
         raise HTTPException(status_code=404, detail="Protocol not found")
-    
     results = db.query(ProtocolExecutionResult).filter(
         ProtocolExecutionResult.protocol_id == protocol_id
     ).order_by(ProtocolExecutionResult.execution_number).all()
-    
     return {
         "protocol": {
             "id": protocol.id,
