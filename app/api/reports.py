@@ -9,7 +9,7 @@ from ..models.session_equipment import SessionEquipment
 from ..models.product import Product
 from ..models.equipment import Equipment
 from ..services.report import ReportService
-from .auth import get_current_user  # CHANGED
+from .auth import get_current_user
 import logging
 import traceback
 
@@ -19,7 +19,6 @@ router = APIRouter()
 
 # Helper function to safely get value
 def safe_value(value, default=0):
-    """Safely convert value to float/int, return default if None or invalid"""
     if value is None:
         return default
     try:
@@ -28,7 +27,6 @@ def safe_value(value, default=0):
         return default
 
 def safe_str(value, default='N/A'):
-    """Safely convert value to string"""
     if value is None:
         return default
     return str(value)
@@ -87,7 +85,10 @@ def generate_report(
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f"attachment; filename=validation_report_{session.session_code}.pdf",
-                "Content-Length": str(len(pdf_content))
+                "Content-Length": str(len(pdf_content)),
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
             }
         )
         
@@ -180,7 +181,14 @@ def export_json(
                 "solubility": safe_str(session.next_product.solubility)
             }
         
-        return JSONResponse(content=data)
+        return JSONResponse(
+            content=data,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
+        )
         
     except HTTPException:
         raise
@@ -208,7 +216,12 @@ def export_excel(
         return Response(
             content=buffer.getvalue(),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=validation_data_{session.session_code}.xlsx"}
+            headers={
+                "Content-Disposition": f"attachment; filename=validation_data_{session.session_code}.xlsx",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
         )
         
     except HTTPException:
@@ -216,3 +229,19 @@ def export_excel(
     except Exception as e:
         logger.error(f"Excel export failed for session {session_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Excel export failed: {str(e)}")
+
+
+# OPTIONS handler for CORS preflight requests
+@router.options("/{session_id}/pdf")
+@router.options("/{session_id}/json")
+@router.options("/{session_id}/excel")
+def options_handler():
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Max-Age": "3600"
+        }
+    )

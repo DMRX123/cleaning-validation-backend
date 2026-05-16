@@ -32,18 +32,27 @@ class ExecuteProtocolRequest(BaseModel):
     deviations: Optional[str] = None
     investigator: str
 
+
 @router.post("/create")
 def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db)):
-    equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
-    previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
-    next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
-    
-    if not equipment:
-        raise HTTPException(status_code=404, detail="Equipment not found")
-    if not previous or not next_product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
     try:
+        logger.info(f"Creating protocol for equipment {request.equipment_id}")
+        
+        equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
+        if not equipment:
+            logger.error(f"Equipment {request.equipment_id} not found")
+            raise HTTPException(status_code=404, detail=f"Equipment {request.equipment_id} not found")
+        
+        previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
+        if not previous:
+            logger.error(f"Previous product {request.previous_product_id} not found")
+            raise HTTPException(status_code=404, detail=f"Previous product {request.previous_product_id} not found")
+        
+        next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
+        if not next_product:
+            logger.error(f"Next product {request.next_product_id} not found")
+            raise HTTPException(status_code=404, detail=f"Next product {request.next_product_id} not found")
+        
         protocol = ProtocolService.create_protocol(
             db,
             request.equipment_id,
@@ -52,6 +61,9 @@ def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db
             request.cleaning_procedure_id,
             request.prepared_by
         )
+        
+        logger.info(f"Protocol created successfully with ID {protocol.id}")
+        
         return {
             "id": protocol.id,
             "protocol_number": protocol.protocol_number,
@@ -59,18 +71,29 @@ def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db
             "status": protocol.status,
             "message": "Protocol created successfully"
         }
+        
     except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Protocol creation error: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to create protocol: {str(e)}")
+
 
 @router.get("/{protocol_id}")
 def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
-    protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
-    if not protocol:
-        raise HTTPException(status_code=404, detail="Protocol not found")
-    return protocol
+    try:
+        protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
+        if not protocol:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        return protocol
+    except Exception as e:
+        logger.error(f"Get protocol error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get protocol: {str(e)}")
+
 
 @router.get("/{protocol_id}/pdf")
 def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
@@ -80,19 +103,19 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
     from reportlab.lib import colors
     from reportlab.lib.units import inch
     
-    protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
-    if not protocol:
-        raise HTTPException(status_code=404, detail="Protocol not found")
-    
-    equipment = db.query(Equipment).filter(Equipment.id == protocol.equipment_id).first()
-    if not equipment:
-        raise HTTPException(status_code=400, detail=f"Equipment not found for protocol {protocol_id}")
-    
-    previous = db.query(Product).filter(Product.id == protocol.previous_product_id).first()
-    if not previous:
-        raise HTTPException(status_code=400, detail=f"Previous product not found for protocol {protocol_id}")
-    
     try:
+        protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
+        if not protocol:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        
+        equipment = db.query(Equipment).filter(Equipment.id == protocol.equipment_id).first()
+        if not equipment:
+            raise HTTPException(status_code=400, detail=f"Equipment not found for protocol {protocol_id}")
+        
+        previous = db.query(Product).filter(Product.id == protocol.previous_product_id).first()
+        if not previous:
+            raise HTTPException(status_code=400, detail=f"Previous product not found for protocol {protocol_id}")
+        
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
         styles = getSampleStyleSheet()
@@ -191,97 +214,118 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
         return Response(
             content=buffer.getvalue(),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=validation_protocol_{protocol.protocol_number}.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename=validation_protocol_{protocol.protocol_number}.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
         )
     except Exception as e:
         logger.error(f"PDF generation error for protocol {protocol_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
+
 @router.post("/execute")
 def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_db)):
-    protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == request.protocol_id).first()
-    if not protocol:
-        raise HTTPException(status_code=404, detail="Protocol not found")
-    
-    chemical_pass = request.chemical_result_ppm <= (protocol.chemical_acceptance_ppm or 999999)
-    visual_pass = request.visual_result == "PASS"
-    
-    microbiological_pass = True
-    if protocol.microbiological_acceptance and request.microbiological_result is not None:
-        microbiological_pass = request.microbiological_result <= protocol.microbiological_acceptance
-    elif protocol.microbiological_acceptance and request.microbiological_result is None:
-        microbiological_pass = False
-    
-    overall = "PASS" if (visual_pass and chemical_pass and microbiological_pass) else "FAIL"
-    
-    result = ProtocolExecutionResult(
-        protocol_id=request.protocol_id,
-        execution_number=request.execution_number,
-        execution_date=datetime.now(),
-        visual_result=request.visual_result,
-        chemical_result_ppm=request.chemical_result_ppm,
-        microbiological_result=request.microbiological_result,
-        overall_result=overall,
-        deviations=request.deviations,
-        investigator=request.investigator
-    )
-    
-    db.add(result)
-    
-    existing_results = db.query(ProtocolExecutionResult).filter(
-        ProtocolExecutionResult.protocol_id == request.protocol_id
-    ).count()
-    
-    if existing_results + 1 >= 3:
-        protocol.status = "EXECUTED"
-        all_results = db.query(ProtocolExecutionResult).filter(
+    try:
+        protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == request.protocol_id).first()
+        if not protocol:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        
+        chemical_pass = request.chemical_result_ppm <= (protocol.chemical_acceptance_ppm or 999999)
+        visual_pass = request.visual_result == "PASS"
+        
+        microbiological_pass = True
+        if protocol.microbiological_acceptance and request.microbiological_result is not None:
+            microbiological_pass = request.microbiological_result <= protocol.microbiological_acceptance
+        elif protocol.microbiological_acceptance and request.microbiological_result is None:
+            microbiological_pass = False
+        
+        overall = "PASS" if (visual_pass and chemical_pass and microbiological_pass) else "FAIL"
+        
+        result = ProtocolExecutionResult(
+            protocol_id=request.protocol_id,
+            execution_number=request.execution_number,
+            execution_date=datetime.now(),
+            visual_result=request.visual_result,
+            chemical_result_ppm=request.chemical_result_ppm,
+            microbiological_result=request.microbiological_result,
+            overall_result=overall,
+            deviations=request.deviations,
+            investigator=request.investigator
+        )
+        
+        db.add(result)
+        
+        existing_results = db.query(ProtocolExecutionResult).filter(
             ProtocolExecutionResult.protocol_id == request.protocol_id
-        ).all()
-        all_passed = all(r.overall_result == "PASS" for r in all_results) and overall == "PASS"
-        if all_passed:
-            protocol.status = "APPROVED"
-    
-    db.commit()
-    
-    return {
-        "execution_result": {
-            "id": result.id,
-            "execution_number": result.execution_number,
-            "overall_result": result.overall_result,
-            "execution_date": result.execution_date.isoformat()
-        },
-        "protocol_status": protocol.status,
-        "replicates_completed": existing_results + 1,
-        "replicates_required": 3,
-        "validation_complete": protocol.status == "APPROVED"
-    }
+        ).count()
+        
+        if existing_results + 1 >= 3:
+            protocol.status = "EXECUTED"
+            all_results = db.query(ProtocolExecutionResult).filter(
+                ProtocolExecutionResult.protocol_id == request.protocol_id
+            ).all()
+            all_passed = all(r.overall_result == "PASS" for r in all_results) and overall == "PASS"
+            if all_passed:
+                protocol.status = "APPROVED"
+        
+        db.commit()
+        
+        return {
+            "execution_result": {
+                "id": result.id,
+                "execution_number": result.execution_number,
+                "overall_result": result.overall_result,
+                "execution_date": result.execution_date.isoformat()
+            },
+            "protocol_status": protocol.status,
+            "replicates_completed": existing_results + 1,
+            "replicates_required": 3,
+            "validation_complete": protocol.status == "APPROVED"
+        }
+        
+    except Exception as e:
+        logger.error(f"Execute protocol error: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to execute protocol: {str(e)}")
+
 
 @router.get("/{protocol_id}/results")
 def get_protocol_results(protocol_id: int, db: Session = Depends(get_db)):
-    protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
-    if not protocol:
-        raise HTTPException(status_code=404, detail="Protocol not found")
-    results = db.query(ProtocolExecutionResult).filter(
-        ProtocolExecutionResult.protocol_id == protocol_id
-    ).order_by(ProtocolExecutionResult.execution_number).all()
-    return {
-        "protocol": {
-            "id": protocol.id,
-            "protocol_number": protocol.protocol_number,
-            "status": protocol.status
-        },
-        "executions": [
-            {
-                "execution_number": r.execution_number,
-                "execution_date": r.execution_date.isoformat(),
-                "visual_result": r.visual_result,
-                "chemical_result_ppm": r.chemical_result_ppm,
-                "microbiological_result": r.microbiological_result,
-                "overall_result": r.overall_result,
-                "deviations": r.deviations,
-                "investigator": r.investigator
-            }
-            for r in results
-        ],
-        "validation_passed": protocol.status == "APPROVED"
-    }
+    try:
+        protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
+        if not protocol:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        results = db.query(ProtocolExecutionResult).filter(
+            ProtocolExecutionResult.protocol_id == protocol_id
+        ).order_by(ProtocolExecutionResult.execution_number).all()
+        return {
+            "protocol": {
+                "id": protocol.id,
+                "protocol_number": protocol.protocol_number,
+                "status": protocol.status
+            },
+            "executions": [
+                {
+                    "execution_number": r.execution_number,
+                    "execution_date": r.execution_date.isoformat(),
+                    "visual_result": r.visual_result,
+                    "chemical_result_ppm": r.chemical_result_ppm,
+                    "microbiological_result": r.microbiological_result,
+                    "overall_result": r.overall_result,
+                    "deviations": r.deviations,
+                    "investigator": r.investigator
+                }
+                for r in results
+            ],
+            "validation_passed": protocol.status == "APPROVED"
+        }
+    except Exception as e:
+        logger.error(f"Get protocol results error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get results: {str(e)}")
+
+
+# Add missing import at the top
+import traceback
