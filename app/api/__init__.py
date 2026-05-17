@@ -15,6 +15,8 @@ from . import cleaning_validation
 from . import protocols
 from . import guidance
 from . import cleaning_process
+from . import training
+from . import formulation  # NEW: Formulation plants API
 
 __all__ = [
     "auth",
@@ -29,4 +31,6 @@ __all__ = [
     "protocols",
     "guidance",
     "cleaning_process",
+    "training",
+    "formulation",  # NEW
 ]

@@ -41,13 +41,18 @@ from .ade_calculation import ADECalculation
 # Section 4.2.4 - Swab Area Segmentation
 from .swab_area import SwabSamplingArea
 
-# Section 6.0 - Cleaning Process Control (NEW)
+# Section 6.0 - Cleaning Process Control
 from .cleaning_process import (
     CleaningProcess, 
     CleaningParameter, 
     CleaningExecution, 
     CleaningTypeEnum
 )
+
+# NEW: Formulation Plant Models
+from .dosage_form import DosageForm, DosageFormEnum, PlantTypeEnum, ProductDosageForm
+from .sampling_methods import SamplingLocation, SamplingResult, SamplingMethodEnum
+from .formulation_equipment import FormulationEquipment, EquipmentCategoryEnum
 
 __all__ = [
     # Core Models
@@ -102,4 +107,15 @@ __all__ = [
     "CleaningParameter",
     "CleaningExecution",
     "CleaningTypeEnum",
+    
+    # NEW: Formulation Plant Models
+    "DosageForm",
+    "DosageFormEnum",
+    "PlantTypeEnum",
+    "ProductDosageForm",
+    "SamplingLocation",
+    "SamplingResult",
+    "SamplingMethodEnum",
+    "FormulationEquipment",
+    "EquipmentCategoryEnum",
 ]

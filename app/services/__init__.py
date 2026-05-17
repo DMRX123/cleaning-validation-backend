@@ -34,6 +34,9 @@ from .guidance_service import GuidanceService
 from .cleaning_process_service import CleaningProcessService
 from .cleaning_capability_service import CleaningCapabilityService
 
+# NEW: Formulation Service
+from .formulation_service import FormulationService
+
 __all__ = [
     "MACOService",
     "SwabService",
@@ -58,4 +61,5 @@ __all__ = [
     "GuidanceService",
     "CleaningProcessService",
     "CleaningCapabilityService",
+    "FormulationService",  # NEW
 ]

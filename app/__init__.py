@@ -12,17 +12,20 @@ from .main import app
 from .api import (
     auth, products, equipment, calculations, validation,
     reports, static_data, dashboard, cleaning_validation, 
-    protocols, guidance, cleaning_process
+    protocols, guidance, cleaning_process, training, formulation
 )
 from .models import (
     Product, Equipment, ValidationSession, User, 
     ValidationProtocol, CleaningLevelEnum,
-    CleaningProcess, CleaningParameter, CleaningExecution
+    CleaningProcess, CleaningParameter, CleaningExecution,
+    DosageForm, DosageFormEnum, PlantTypeEnum,
+    SamplingLocation, SamplingResult, SamplingMethodEnum,
+    FormulationEquipment, EquipmentCategoryEnum
 )
 from .services import (
     MACOService, SwabService, RinseService, CleaningLevelService,
     HoldTimeService, BracketingService, ADEService, GuidanceService,
-    CleaningProcessService, CleaningCapabilityService
+    CleaningProcessService, CleaningCapabilityService, FormulationService
 )
 
 __all__ = [
@@ -39,6 +42,8 @@ __all__ = [
     "protocols",
     "guidance",
     "cleaning_process",
+    "training",
+    "formulation",
     "Product",
     "Equipment", 
     "ValidationSession",
@@ -48,6 +53,14 @@ __all__ = [
     "CleaningProcess",
     "CleaningParameter",
     "CleaningExecution",
+    "DosageForm",
+    "DosageFormEnum",
+    "PlantTypeEnum",
+    "SamplingLocation",
+    "SamplingResult",
+    "SamplingMethodEnum",
+    "FormulationEquipment",
+    "EquipmentCategoryEnum",
     "MACOService",
     "SwabService", 
     "RinseService",
@@ -58,4 +71,5 @@ __all__ = [
     "GuidanceService",
     "CleaningProcessService",
     "CleaningCapabilityService",
+    "FormulationService",
 ]

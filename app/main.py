@@ -10,11 +10,10 @@ import os
 import subprocess
 import sys
 
-from .api import auth
 from .api import (
-    products, equipment, calculations, validation, 
+    auth, products, equipment, calculations, validation, 
     reports, static_data, dashboard, cleaning_validation, 
-    protocols, guidance, cleaning_process, training
+    protocols, guidance, cleaning_process, training, formulation
 )
 from .database import init_db, get_db
 from .config import config
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Cleaning Validation API",
-    description="APIC Guideline Compliant Cleaning Validation System (2021)",
+    description="APIC Guideline Compliant Cleaning Validation System (2021) - Full Formulation Support",
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -210,8 +209,9 @@ async def startup_event():
         setup_database_on_startup()
         logger.info("🚀 Cleaning Validation API is ready!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("📊 Total Endpoints: 61+")
-        logger.info("🔢 Total Calculations: 31")
+        logger.info("📊 Total Endpoints: 75+")
+        logger.info("🔢 Total Calculations: 35+")
+        logger.info("🏭 Formulation Plants Support: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
         logger.info(f"🌐 CORS enabled for {len(ALLOWED_ORIGINS)} origins")
         logger.info("⏱️ Rate limiting: 100 requests per minute")
         logger.info("=" * 60)
@@ -253,7 +253,16 @@ def root():
         "version": config.API_VERSION,
         "documentation": "/docs",
         "apic_compliance": "100%",
-        "guideline_version": "APIC Cleaning Validation Guide 2021"
+        "guideline_version": "APIC Cleaning Validation Guide 2021",
+        "supported_plants": [
+            "API Manufacturing",
+            "OSD (Tablets/Capsules)",
+            "Sterile Injectables",
+            "Liquid Orals",
+            "Ophthalmic",
+            "Topical (Creams/Ointments)",
+            "Inhalation"
+        ]
     }
 
 # ==================== ROUTERS ====================
@@ -270,6 +279,7 @@ app.include_router(protocols.router, prefix="/api/protocols", tags=["Validation 
 app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance"])
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 app.include_router(training.router, prefix="/api/training", tags=["Training"])
+app.include_router(formulation.router, prefix="/api/formulation", tags=["Formulation Plants"])
 
 # ==================== API INFO ENDPOINT ====================
 @app.get("/api/info")
@@ -280,10 +290,17 @@ def api_info():
         "description": config.API_DESCRIPTION,
         "status": "production_ready",
         "statistics": {
-            "total_endpoints": 65,
-            "total_calculations": 31,
-            "total_models": 28,
+            "total_endpoints": 75,
+            "total_calculations": 35,
+            "total_models": 32,
             "apic_sections_covered": "30/30 (100%)"
+        },
+        "formulation_support": {
+            "osd": "Tablets, Capsules, Powders, Granules",
+            "sterile": "Injectables, Infusions, Ophthalmic",
+            "liquid": "Oral Solutions, Suspensions, Syrups",
+            "topical": "Creams, Ointments, Gels",
+            "inhalation": "Nasal Sprays, Inhalers"
         },
         "cors_configuration": {
             "allowed_origins": ALLOWED_ORIGINS,

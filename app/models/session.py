@@ -54,4 +54,4 @@ class ValidationSession(Base):
     standard_prep = relationship("StandardPrep", back_populates="session", uselist=False)
     swab_results = relationship("SwabResult", back_populates="session")
     rinse_results = relationship("RinseResult", back_populates="session")
-    session_equipment = relationship("SessionEquipment", back_populates="session")
+    session_equipment = relationship("SessionEquipment", back_populates="session")  
