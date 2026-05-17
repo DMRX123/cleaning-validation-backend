@@ -34,48 +34,30 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== CORS MIDDLEWARE (FIXED - MOST PERMISSIVE FOR PRODUCTION) ====================
+# ==================== CORS MIDDLEWARE (FINAL - COMPLETE CONFIGURATION) ====================
 
-# Option 1: Allow all origins for testing (TEMPORARY - Remove after confirming)
-ALLOW_ALL_ORIGINS = True  # Set to False after testing
+# Get CORS origins from config
+ALLOWED_ORIGINS = config.get_cors_origins()
+ALLOW_ALL_ORIGINS = config.ALLOW_ALL_ORIGINS
 
+logger.info("=" * 60)
+logger.info("🌐 CORS FINAL CONFIGURATION")
 if ALLOW_ALL_ORIGINS:
-    # Most permissive - allows any frontend to connect
-    CORS_CONFIG = {
-        "allow_origins": ["*"],
-        "allow_credentials": True,
-        "allow_methods": ["*"],
-        "allow_headers": ["*"],
-        "expose_headers": ["*"],
-        "max_age": 3600,
-    }
-    logger.info("⚠️ CORS: ALLOWING ALL ORIGINS (Temporary mode)")
+    logger.info("   Mode: ALLOW ALL ORIGINS (*)")
 else:
-    # Production mode - specific origins
-    ALLOWED_ORIGINS = config.get_cors_origins()
-    CORS_CONFIG = {
-        "allow_origins": ALLOWED_ORIGINS,
-        "allow_credentials": True,
-        "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        "allow_headers": ["*"],
-        "expose_headers": ["*"],
-        "max_age": 3600,
-    }
-    logger.info("=" * 60)
-    logger.info("CORS CONFIGURATION (Production Mode)")
-    logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
+    logger.info(f"   Mode: Specific Origins ({len(ALLOWED_ORIGINS)} origins)")
     for origin in ALLOWED_ORIGINS:
-        logger.info(f"  - {origin}")
-    logger.info("=" * 60)
+        logger.info(f"     - {origin}")
+logger.info("=" * 60)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_CONFIG["allow_origins"],
-    allow_credentials=CORS_CONFIG["allow_credentials"],
-    allow_methods=CORS_CONFIG["allow_methods"],
-    allow_headers=CORS_CONFIG["allow_headers"],
-    expose_headers=CORS_CONFIG["expose_headers"],
-    max_age=CORS_CONFIG["max_age"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 # ==================== RATE LIMITING MIDDLEWARE ====================
@@ -91,13 +73,6 @@ except ImportError as e:
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
     response = await call_next(request)
-    
-    # Add CORS headers manually for safety
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    
     process_time = (datetime.now() - start_time).total_seconds()
     logger.info(
         f"{request.method} {request.url.path} - "
@@ -107,16 +82,17 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# ==================== OPTIONS HANDLER FOR CORS ====================
+# ==================== OPTIONS HANDLER FOR CORS PREFLIGHT ====================
 @app.options("/{path:path}")
 async def options_handler(path: str):
+    """Handle CORS preflight requests"""
     return JSONResponse(
         status_code=200,
         content={"message": "OK"},
         headers={
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": "*" if ALLOW_ALL_ORIGINS else ", ".join(ALLOWED_ORIGINS) if ALLOWED_ORIGINS else "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Max-Age": "3600",
         }
@@ -132,10 +108,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": exc.detail,
             "status_code": exc.status_code,
             "timestamp": datetime.now().isoformat()
-        },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -148,10 +120,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "Validation Error",
             "details": exc.errors(),
             "timestamp": datetime.now().isoformat()
-        },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -164,10 +132,6 @@ async def general_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error": "Internal server error",
             "timestamp": datetime.now().isoformat()
-        },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -241,18 +205,23 @@ def setup_database_on_startup():
 @app.on_event("startup")
 async def startup_event():
     logger.info("=" * 60)
-    logger.info("Starting up Cleaning Validation API...")
-    logger.info(f"Environment: {config.ENVIRONMENT}")
-    logger.info(f"Debug mode: {config.DEBUG}")
-    logger.info(f"API Version: {config.API_VERSION}")
+    logger.info("🚀 Starting up Cleaning Validation API...")
+    logger.info(f"   Environment: {config.ENVIRONMENT}")
+    logger.info(f"   Debug mode: {config.DEBUG}")
+    logger.info(f"   API Version: {config.API_VERSION}")
+    logger.info(f"   CORS Mode: {'Allow All' if ALLOW_ALL_ORIGINS else 'Restricted'}")
+    if not ALLOW_ALL_ORIGINS:
+        logger.info(f"   CORS Origins: {len(ALLOWED_ORIGINS)} origins configured")
     try:
         init_db()
         logger.info("✅ Database tables ready")
         setup_database_on_startup()
-        logger.info("🚀 Cleaning Validation API is ready!")
+        logger.info("=" * 60)
+        logger.info("🎉 Cleaning Validation API is READY!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("🏭 Formulation Plants Support: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
-        logger.info("🌐 CORS: Allow all origins mode (temporary)")
+        logger.info("🏭 Formulation Plants: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
+        logger.info("🌐 CORS: Enabled for frontend")
+        logger.info("🔒 Rate Limiting: 100 requests/minute")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
@@ -261,7 +230,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down Cleaning Validation API...")
+    logger.info("🛑 Shutting down Cleaning Validation API...")
 
 # ==================== HEALTH & ROOT ENDPOINTS ====================
 @app.get("/health")
@@ -280,6 +249,7 @@ def health_check(db: Session = Depends(get_db)):
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
         "cors_mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
+        "rate_limiting_enabled": True,
         "environment": config.ENVIRONMENT
     }
 
@@ -342,7 +312,12 @@ def api_info():
         },
         "cors_configuration": {
             "mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
-            "allowed_origins": ["*"] if ALLOW_ALL_ORIGINS else config.get_cors_origins()
+            "allowed_origins_count": len(ALLOWED_ORIGINS),
+            "allowed_origins": ALLOWED_ORIGINS if not ALLOW_ALL_ORIGINS else ["*"]
+        },
+        "rate_limiting": {
+            "enabled": True,
+            "calls_per_minute": 100
         },
         "environment": config.ENVIRONMENT
     }

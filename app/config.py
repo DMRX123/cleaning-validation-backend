@@ -43,29 +43,34 @@ class Config:
         logger.warning("⚠️ Using development SECRET_KEY. DO NOT use in production!")
     
     # ============================================
-    # CORS CONFIGURATION (FIXED - More Permissive)
+    # CORS CONFIGURATION (FINAL - ALL URLS INCLUDED)
     # ============================================
     
-    # Production CORS origins - ALL Vercel URLs
-    PRODUCTION_CORS_ORIGINS = [
+    # Complete list of allowed origins (Development + Production)
+    ALLOWED_CORS_ORIGINS = [
+        # Local Development
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        
+        # Production Vercel URLs
         "https://cleaning-validation-frontend.vercel.app",
         "https://cleaning-validation.vercel.app",
         "https://cleaning-validation-frontend-git-main.vercel.app",
         "https://cleaning-validation-frontend-dmrx123.vercel.app",
         "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
-        "https://cleaning-validation-frontend-git-*.vercel.app",
+        
+        # Wildcard patterns for Vercel (handled separately)
         "https://*.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
     ]
     
-    # Get CORS origins from environment variable (if set)
+    # Get additional CORS origins from environment variable (if set)
     env_cors_origins = os.getenv("CORS_ORIGINS", "")
     
-    CORS_ORIGINS = PRODUCTION_CORS_ORIGINS.copy()
+    CORS_ORIGINS = ALLOWED_CORS_ORIGINS.copy()
     
     # Add custom origins from environment variable
     if env_cors_origins:
@@ -74,14 +79,20 @@ class Config:
             if origin and origin not in CORS_ORIGINS:
                 CORS_ORIGINS.append(origin)
     
-    # Remove duplicates
+    # Remove duplicates while preserving order
     CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
+    
+    # For production, also allow any origin (temporarily for debugging)
+    # Set ALLOW_ALL_ORIGINS=true in environment to enable
+    ALLOW_ALL_ORIGINS = os.getenv("ALLOW_ALL_ORIGINS", "false").lower() == "true"
     
     # Log CORS configuration
     logger.info("=" * 60)
     logger.info("🌐 CORS ALLOWED ORIGINS:")
     for origin in CORS_ORIGINS:
         logger.info(f"   - {origin}")
+    if ALLOW_ALL_ORIGINS:
+        logger.info("   ⚠️ ALSO ALLOWING ALL ORIGINS (*) - Temporary mode")
     logger.info("=" * 60)
     
     # ============================================
@@ -123,6 +134,8 @@ class Config:
     @classmethod
     def get_cors_origins(cls) -> list:
         """Get CORS allowed origins"""
+        if cls.ALLOW_ALL_ORIGINS:
+            return ["*"]
         return cls.CORS_ORIGINS
     
     @classmethod
@@ -156,7 +169,9 @@ class Config:
         logger.info("✅ Configuration validated successfully")
         return True
 
+# Create config instance
 config = Config()
 
+# Validate configuration on import
 if config.IS_PRODUCTION:
     config.validate()
