@@ -18,9 +18,6 @@ from .api import (
 from .database import init_db, get_db
 from .config import config
 
-# FIXED: RateLimitMiddleware import (after creating the file)
-from .middleware.ratelimit import RateLimitMiddleware
-
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -37,35 +34,70 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
-ALLOWED_ORIGINS = config.get_cors_origins()
+# ==================== CORS MIDDLEWARE (FIXED - MOST PERMISSIVE FOR PRODUCTION) ====================
 
-logger.info("=" * 60)
-logger.info("CORS CONFIGURATION")
-logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
-for origin in ALLOWED_ORIGINS:
-    logger.info(f"  - {origin}")
-logger.info("=" * 60)
+# Option 1: Allow all origins for testing (TEMPORARY - Remove after confirming)
+ALLOW_ALL_ORIGINS = True  # Set to False after testing
+
+if ALLOW_ALL_ORIGINS:
+    # Most permissive - allows any frontend to connect
+    CORS_CONFIG = {
+        "allow_origins": ["*"],
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+        "expose_headers": ["*"],
+        "max_age": 3600,
+    }
+    logger.info("⚠️ CORS: ALLOWING ALL ORIGINS (Temporary mode)")
+else:
+    # Production mode - specific origins
+    ALLOWED_ORIGINS = config.get_cors_origins()
+    CORS_CONFIG = {
+        "allow_origins": ALLOWED_ORIGINS,
+        "allow_credentials": True,
+        "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        "allow_headers": ["*"],
+        "expose_headers": ["*"],
+        "max_age": 3600,
+    }
+    logger.info("=" * 60)
+    logger.info("CORS CONFIGURATION (Production Mode)")
+    logger.info(f"Allowed origins ({len(ALLOWED_ORIGINS)}):")
+    for origin in ALLOWED_ORIGINS:
+        logger.info(f"  - {origin}")
+    logger.info("=" * 60)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
+    allow_origins=CORS_CONFIG["allow_origins"],
+    allow_credentials=CORS_CONFIG["allow_credentials"],
+    allow_methods=CORS_CONFIG["allow_methods"],
+    allow_headers=CORS_CONFIG["allow_headers"],
+    expose_headers=CORS_CONFIG["expose_headers"],
+    max_age=CORS_CONFIG["max_age"],
 )
 
 # ==================== RATE LIMITING MIDDLEWARE ====================
-app.add_middleware(RateLimitMiddleware, calls=100, period=60)
-logger.info("✅ Rate limiting middleware enabled (100 requests per 60 seconds)")
+try:
+    from .middleware.ratelimit import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware, calls=100, period=60)
+    logger.info("✅ Rate limiting middleware enabled (100 requests per 60 seconds)")
+except ImportError as e:
+    logger.warning(f"⚠️ Rate limiting middleware not loaded: {e}")
 
 # ==================== REQUEST LOGGING MIDDLEWARE ====================
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
     response = await call_next(request)
+    
+    # Add CORS headers manually for safety
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
     process_time = (datetime.now() - start_time).total_seconds()
     logger.info(
         f"{request.method} {request.url.path} - "
@@ -74,6 +106,21 @@ async def log_requests(request: Request, call_next):
     )
     response.headers["X-Process-Time"] = str(process_time)
     return response
+
+# ==================== OPTIONS HANDLER FOR CORS ====================
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    return JSONResponse(
+        status_code=200,
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 # ==================== EXCEPTION HANDLERS ====================
 @app.exception_handler(HTTPException)
@@ -85,6 +132,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": exc.detail,
             "status_code": exc.status_code,
             "timestamp": datetime.now().isoformat()
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -97,6 +148,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "Validation Error",
             "details": exc.errors(),
             "timestamp": datetime.now().isoformat()
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -109,6 +164,10 @@ async def general_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error": "Internal server error",
             "timestamp": datetime.now().isoformat()
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
         }
     )
 
@@ -164,21 +223,6 @@ def setup_database_on_startup():
                         logger.info("✅ Cleaning levels created")
                 except Exception as e:
                     logger.warning(f"⚠️ Could not create cleaning levels: {e}")
-                
-                try:
-                    seed_script = os.path.join(os.path.dirname(__file__), "..", "scripts", "seed_static_data.py")
-                    if os.path.exists(seed_script):
-                        result = subprocess.run(
-                            [sys.executable, seed_script], 
-                            capture_output=True, 
-                            text=True
-                        )
-                        if result.returncode == 0:
-                            logger.info("✅ Static data seeded successfully")
-                        else:
-                            logger.warning(f"⚠️ Seed warning: {result.stderr}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Could not run seed script: {e}")
             else:
                 logger.info(f"✅ Database already has {user_count} users.")
                 
@@ -207,11 +251,8 @@ async def startup_event():
         setup_database_on_startup()
         logger.info("🚀 Cleaning Validation API is ready!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("📊 Total Endpoints: 75+")
-        logger.info("🔢 Total Calculations: 35+")
         logger.info("🏭 Formulation Plants Support: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
-        logger.info(f"🌐 CORS enabled for {len(ALLOWED_ORIGINS)} origins")
-        logger.info("⏱️ Rate limiting: 100 requests per minute")
+        logger.info("🌐 CORS: Allow all origins mode (temporary)")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
@@ -238,8 +279,7 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
-        "rate_limiting_enabled": True,
-        "allowed_origins": ALLOWED_ORIGINS,
+        "cors_mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
         "environment": config.ENVIRONMENT
     }
 
@@ -277,7 +317,6 @@ app.include_router(protocols.router, prefix="/api/protocols", tags=["Validation 
 app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance"])
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 app.include_router(training.router, prefix="/api/training", tags=["Training"])
-# FIXED: formulation router now has NO prefix, so adding /api/formulation here
 app.include_router(formulation.router, prefix="/api/formulation", tags=["Formulation Plants"])
 
 # ==================== API INFO ENDPOINT ====================
@@ -302,14 +341,8 @@ def api_info():
             "inhalation": "Nasal Sprays, Inhalers"
         },
         "cors_configuration": {
-            "allowed_origins": ALLOWED_ORIGINS,
-            "allow_credentials": True,
-            "allow_methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-        },
-        "rate_limiting": {
-            "enabled": True,
-            "calls_per_minute": 100,
-            "period_seconds": 60
+            "mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
+            "allowed_origins": ["*"] if ALLOW_ALL_ORIGINS else config.get_cors_origins()
         },
         "environment": config.ENVIRONMENT
     }

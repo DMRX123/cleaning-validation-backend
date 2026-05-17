@@ -13,12 +13,11 @@ class Config:
     # ============================================
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     
-    # Normalize database URL (handle postgres:// vs postgresql://)
+    # Normalize database URL
     if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
         logger.info("Normalized database URL from postgres:// to postgresql://")
     
-    # Log database connection (masked for security)
     if DATABASE_URL:
         masked_url = DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else 'database'
         logger.info(f"🔍 DATABASE_URL configured: {masked_url[:50]}...")
@@ -32,25 +31,30 @@ class Config:
     ALGORITHM = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     
-    # Environment detection
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     IS_PRODUCTION = ENVIRONMENT == "production"
     IS_DEVELOPMENT = ENVIRONMENT == "development"
     
-    # Production security check - SECRET_KEY is mandatory
     if IS_PRODUCTION and not SECRET_KEY:
         raise ValueError("❌ SECRET_KEY environment variable is REQUIRED in production!")
     
-    # Development fallback (only for local development)
     if not SECRET_KEY and IS_DEVELOPMENT:
         SECRET_KEY = "dev-secret-key-do-not-use-in-production"
         logger.warning("⚠️ Using development SECRET_KEY. DO NOT use in production!")
     
     # ============================================
-    # CORS CONFIGURATION (Production Ready - Updated with all Vercel URLs)
+    # CORS CONFIGURATION (FIXED - More Permissive)
     # ============================================
-    # Default CORS origins for development
-    DEFAULT_CORS_ORIGINS = [
+    
+    # Production CORS origins - ALL Vercel URLs
+    PRODUCTION_CORS_ORIGINS = [
+        "https://cleaning-validation-frontend.vercel.app",
+        "https://cleaning-validation.vercel.app",
+        "https://cleaning-validation-frontend-git-main.vercel.app",
+        "https://cleaning-validation-frontend-dmrx123.vercel.app",
+        "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
+        "https://cleaning-validation-frontend-git-*.vercel.app",
+        "https://*.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
@@ -58,23 +62,10 @@ class Config:
         "http://127.0.0.1:5173",
     ]
     
-    # Production CORS origins (All Vercel frontend URLs)
-    PRODUCTION_CORS_ORIGINS = [
-        "https://cleaning-validation-frontend.vercel.app",
-        "https://cleaning-validation.vercel.app",
-        "https://cleaning-validation-frontend-git-main.vercel.app",
-        "https://cleaning-validation-frontend-dmrx123.vercel.app",
-        "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
-    ]
-    
     # Get CORS origins from environment variable (if set)
     env_cors_origins = os.getenv("CORS_ORIGINS", "")
     
-    CORS_ORIGINS = DEFAULT_CORS_ORIGINS.copy()
-    
-    # Add production origins if in production or if specified
-    if IS_PRODUCTION:
-        CORS_ORIGINS.extend(PRODUCTION_CORS_ORIGINS)
+    CORS_ORIGINS = PRODUCTION_CORS_ORIGINS.copy()
     
     # Add custom origins from environment variable
     if env_cors_origins:
@@ -83,7 +74,7 @@ class Config:
             if origin and origin not in CORS_ORIGINS:
                 CORS_ORIGINS.append(origin)
     
-    # Remove duplicates while preserving order
+    # Remove duplicates
     CORS_ORIGINS = list(dict.fromkeys(CORS_ORIGINS))
     
     # Log CORS configuration
@@ -99,13 +90,12 @@ class Config:
     DEBUG = os.getenv("DEBUG", "False" if IS_PRODUCTION else "True").lower() == "true"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO" if IS_PRODUCTION else "DEBUG")
     
-    # Configure logging level
     logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper(), logging.INFO))
     
     # ============================================
     # FILE UPLOAD CONFIGURATION
     # ============================================
-    MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB default
+    MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))
     ALLOWED_EXTENSIONS = set(os.getenv("ALLOWED_EXTENSIONS", ".xlsx,.xls,.csv").split(","))
     
     # ============================================
@@ -122,7 +112,7 @@ class Config:
     RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
     
     # ============================================
-    # SUPABASE CONFIGURATION (Optional)
+    # SUPABASE CONFIGURATION
     # ============================================
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
@@ -132,22 +122,19 @@ class Config:
     # ============================================
     @classmethod
     def get_cors_origins(cls) -> list:
-        """Get CORS allowed origins (for use in middleware)"""
+        """Get CORS allowed origins"""
         return cls.CORS_ORIGINS
     
     @classmethod
     def is_development(cls) -> bool:
-        """Check if running in development mode"""
         return cls.IS_DEVELOPMENT
     
     @classmethod
     def is_production(cls) -> bool:
-        """Check if running in production mode"""
         return cls.IS_PRODUCTION
     
     @classmethod
     def get_database_url_masked(cls) -> str:
-        """Get masked database URL for logging (hides credentials)"""
         if not cls.DATABASE_URL:
             return "NOT_CONFIGURED"
         if '@' in cls.DATABASE_URL:
@@ -157,32 +144,19 @@ class Config:
     
     @classmethod
     def validate(cls) -> bool:
-        """Validate critical configuration settings"""
         errors = []
-        
-        # Check database URL in production
         if cls.IS_PRODUCTION and not cls.DATABASE_URL:
             errors.append("DATABASE_URL is required in production")
-        
-        # Check secret key in production
         if cls.IS_PRODUCTION and not cls.SECRET_KEY:
             errors.append("SECRET_KEY is required in production")
-        
-        # Check CORS origins in production
-        if cls.IS_PRODUCTION and not cls.CORS_ORIGINS:
-            errors.append("CORS_ORIGINS should be configured in production")
-        
         if errors:
             for error in errors:
                 logger.error(f"❌ Config validation failed: {error}")
             return False
-        
         logger.info("✅ Configuration validated successfully")
         return True
 
-# Create config instance
 config = Config()
 
-# Validate configuration on import
 if config.IS_PRODUCTION:
     config.validate()
