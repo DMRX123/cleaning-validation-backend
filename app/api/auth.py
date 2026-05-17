@@ -98,6 +98,41 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 
+# TEMPORARY ENDPOINT - Remove after admin is created
+@router.post("/setup-admin")
+def setup_admin(db: Session = Depends(get_db)):
+    """Temporary endpoint to create/reset admin user"""
+    try:
+        admin = db.query(User).filter(User.username == 'admin').first()
+        if admin:
+            admin.hashed_password = AuthService.get_password_hash('Admin@123')
+            db.commit()
+            return {
+                "success": True, 
+                "message": "Admin password reset successfully",
+                "username": "admin",
+                "password": "Admin@123"
+            }
+        else:
+            new_admin = User(
+                username='admin',
+                email='admin@cleaning-validation.com',
+                hashed_password=AuthService.get_password_hash('Admin@123'),
+                is_active=True,
+                is_admin=True
+            )
+            db.add(new_admin)
+            db.commit()
+            return {
+                "success": True,
+                "message": "Admin user created successfully",
+                "username": "admin",
+                "password": "Admin@123"
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # DEPENDENCY FUNCTIONS
 # ============================================
