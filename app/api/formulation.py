@@ -1,4 +1,4 @@
-# app/api/formulation.py - COMPLETE ERROR-FREE VERSION
+# app/api/formulation.py - FIXED VERSION (No duplicate prefix)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -11,13 +11,14 @@ from .auth import get_current_user
 from ..models.user import User
 from ..models.product import Product
 from ..models.equipment import Equipment
-from ..models.session import ValidationSession  # IMPORTANT: Added missing import
+from ..models.session import ValidationSession
 from ..models.dosage_form import DosageForm, DosageFormEnum, PlantTypeEnum, ProductDosageForm
 from ..models.sampling_methods import SamplingLocation, SamplingMethodEnum, SamplingResult
 from ..models.formulation_equipment import FormulationEquipment, EquipmentCategoryEnum
 from ..services.formulation_service import FormulationService
 
-router = APIRouter(prefix="/formulation", tags=["Formulation Plants"])
+# FIXED: Removed prefix from here - will be added in main.py
+router = APIRouter(tags=["Formulation Plants"])
 
 # ==================== SCHEMAS ====================
 
@@ -133,7 +134,7 @@ def create_dosage_form(
     if existing:
         raise HTTPException(400, "Dosage form with this code already exists")
     
-    dosage_form = DosageForm(**data.dict())
+    dosage_form = DosageForm(**data.model_dump())
     db.add(dosage_form)
     db.commit()
     db.refresh(dosage_form)
@@ -162,7 +163,7 @@ def link_product_to_dosage_form(
     if existing:
         raise HTTPException(400, "Product already linked to this dosage form")
     
-    link = ProductDosageForm(**data.dict())
+    link = ProductDosageForm(**data.model_dump())
     db.add(link)
     db.commit()
     db.refresh(link)
@@ -190,7 +191,7 @@ def get_product_dosage_form(
         return {"message": "Product not linked to any dosage form"}
     
     dosage_form = db.query(DosageForm).filter(DosageForm.id == link.dosage_form_id).first()
-    requirements = FormulationService.get_dosage_form_requirements(dosage_form.code.value)
+    requirements = FormulationService.get_dosage_form_requirements(dosage_form.code.value) if dosage_form else {}
     
     return {
         "product_id": product_id,
@@ -252,7 +253,7 @@ def create_sampling_location(
     if not equipment:
         raise HTTPException(404, "Equipment not found")
     
-    location = SamplingLocation(**data.dict())
+    location = SamplingLocation(**data.model_dump())
     db.add(location)
     db.commit()
     db.refresh(location)
@@ -276,7 +277,7 @@ def record_sampling_result(
     if not session:
         raise HTTPException(404, "Validation session not found")
     
-    result = SamplingResult(**data.dict())
+    result = SamplingResult(**data.model_dump())
     db.add(result)
     db.commit()
     db.refresh(result)
@@ -308,14 +309,14 @@ def categorize_equipment(
     
     if existing:
         # Update existing
-        for key, value in data.dict().items():
+        for key, value in data.model_dump().items():
             setattr(existing, key, value)
         db.commit()
         db.refresh(existing)
         return {"success": True, "message": "Equipment categorization updated", "id": existing.id}
     else:
         # Create new
-        formulation_eq = FormulationEquipment(**data.dict())
+        formulation_eq = FormulationEquipment(**data.model_dump())
         db.add(formulation_eq)
         db.commit()
         db.refresh(formulation_eq)
@@ -334,7 +335,6 @@ def get_equipment_by_category(
         FormulationEquipment.category == category
     )
     
-    # Join with equipment to filter by plant
     results = []
     for fe in query.all():
         eq = db.query(Equipment).filter(Equipment.id == fe.equipment_id).first()
@@ -363,7 +363,6 @@ def get_plant_type_validation_requirements(
     """Get cleaning validation requirements for a specific plant type"""
     requirements = FormulationService.get_plant_type_requirements(plant_type.value)
     
-    # Get all dosage forms for this plant type
     dosage_forms = db.query(DosageForm).filter(
         DosageForm.plant_type == plant_type
     ).all()
