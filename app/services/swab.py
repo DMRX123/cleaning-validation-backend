@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from ..models.product import Product
 from ..models.session import ValidationSession
+from ..services.maco import MACOService  # FIXED: Absolute import
+
 
 class SwabService:
     
@@ -52,7 +54,7 @@ class SwabService:
     
     @staticmethod
     def calculate_swab_limit_for_product(previous_product: Product, next_product: Product, equipment_area: float) -> dict:
-        from .maco import MACOService
+        # FIXED: Using absolute import
         maco_result = MACOService.calculate_all(previous_product, next_product)
         maco = maco_result["lowest_maco"]
         total_area = equipment_area
@@ -109,7 +111,7 @@ class SwabService:
         if recovery_factor > 0:
             mg_ml = mg_ml / recovery_factor
         
-        # Step 3: Apply potency correction (FIXED - removed double calculation)
+        # Step 3: Apply potency correction
         if potency > 0 and potency != 100:
             mg_ml = mg_ml * (100 / potency)
         
@@ -120,17 +122,17 @@ class SwabService:
         
         if below_loq:
             ppm_display = "Below LOQ"
-            ppm_numeric = 0.0  # CRITICAL: Always number for frontend toFixed()
+            ppm_numeric = 0.0
         else:
             ppm_display = str(ppm_numeric)
         
         return {
             "mg_ml": round(mg_ml, 6),
-            "ppm_numeric": ppm_numeric,      # ALWAYS NUMBER (0 if below LOQ)
-            "ppm_display": ppm_display,       # STRING for display
-            "reported": ppm_display,          # Backward compatibility
-            "below_loq": below_loq,           # Boolean flag
-            "ppm": ppm_numeric                # For backward compatibility
+            "ppm_numeric": ppm_numeric,
+            "ppm_display": ppm_display,
+            "reported": ppm_display,
+            "below_loq": below_loq,
+            "ppm": ppm_numeric
         }
     
     @staticmethod
@@ -163,11 +165,9 @@ class SwabService:
         total_carry_over = 0.0
         details = []
         
-        # Build mapping of result to area (by index or location)
         for idx, area in enumerate(sampling_areas):
             if idx < len(swab_results):
                 result = swab_results[idx]
-                # Use result_ppm (which is now always numeric)
                 if hasattr(result, 'result_ppm'):
                     residue_per_area = result.result_ppm or 0
                 elif isinstance(result, dict):
@@ -175,7 +175,6 @@ class SwabService:
                 else:
                     residue_per_area = 0
                 
-                # Per-area contribution
                 contribution = area.surface_area_dm2 * residue_per_area
                 total_carry_over += contribution
                 
@@ -187,7 +186,6 @@ class SwabService:
                     "surface_type": area.surface_type
                 })
         
-        # Apply recovery correction (Equation 6 style)
         if recovery_factor > 0:
             total_carry_over = total_carry_over / recovery_factor
         
