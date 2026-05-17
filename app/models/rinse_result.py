@@ -1,9 +1,12 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey  # Add Float
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from ..database import Base
 
 class RinseResult(Base):
     __tablename__ = "rinse_results"
+    __table_args__ = (
+        Index('idx_rinse_results_session', 'session_id'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("validation_sessions.id"))

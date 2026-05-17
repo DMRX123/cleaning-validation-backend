@@ -101,16 +101,19 @@ class SwabService:
                 "below_loq": True
             }
         
+        # Step 1: Calculate concentration from absorbance ratio
         mg_ml = (absorbance_sample / absorbance_std) * dilution_factor * swab_dilution_ml
         
+        # Step 2: Apply recovery factor
         recovery_factor = recovery_percent / 100 if recovery_percent > 0 else 1
         if recovery_factor > 0:
             mg_ml = mg_ml / recovery_factor
         
-        potency_factor = potency / 100 if potency > 0 else 1
-        if potency_factor > 0:
+        # Step 3: Apply potency correction (FIXED - removed double calculation)
+        if potency > 0 and potency != 100:
             mg_ml = mg_ml * (100 / potency)
         
+        # Step 4: Convert to ppm (mg/ml * 1000 = µg/ml = ppm)
         ppm = mg_ml * 1000
         ppm_numeric = round(ppm, 2)
         below_loq = ppm < loq_ppm
@@ -123,11 +126,11 @@ class SwabService:
         
         return {
             "mg_ml": round(mg_ml, 6),
-            "ppm_numeric": ppm_numeric,      # ← ALWAYS NUMBER (0 if below LOQ)
-            "ppm_display": ppm_display,       # ← STRING for display
-            "reported": ppm_display,          # ← Backward compatibility
-            "below_loq": below_loq,           # ← Boolean flag
-            "ppm": ppm_numeric                # ← For backward compatibility
+            "ppm_numeric": ppm_numeric,      # ALWAYS NUMBER (0 if below LOQ)
+            "ppm_display": ppm_display,       # STRING for display
+            "reported": ppm_display,          # Backward compatibility
+            "below_loq": below_loq,           # Boolean flag
+            "ppm": ppm_numeric                # For backward compatibility
         }
     
     @staticmethod

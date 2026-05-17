@@ -35,17 +35,16 @@ class CleaningCapabilityService:
                 "error": f"Insufficient data. Need at least 3 executions, found {len(executions)}"
             }
         
-        # Get MACO from validation sessions
+        # Get residue results from validation sessions
         residue_results = []
         for exec_record in executions:
             if exec_record.session_id:
                 session = db.query(ValidationSession).filter(
                     ValidationSession.id == exec_record.session_id
                 ).first()
-                if session and session.lowest_maco:
-                    # Get actual residue from swab/rinse results
+                if session:
+                    # Get actual residue from swab results
                     from ..models.swab_result import SwabResult
-                    from ..models.rinse_result import RinseResult
                     
                     swab_results = db.query(SwabResult).filter(
                         SwabResult.session_id == session.id
@@ -69,22 +68,32 @@ class CleaningCapabilityService:
         variance = sum((x - mean_residue) ** 2 for x in residue_results) / len(residue_results)
         std_dev = math.sqrt(variance)
         
-        # Get MACO (target limit)
-        # Use the lowest MACO from any session
+        # Get MACO from validation sessions (dynamic calculation, not hardcoded)
         sessions = db.query(ValidationSession).filter(
             ValidationSession.process_id == process_id
-        ).all() if hasattr(ValidationSession, 'process_id') else []
+        ).all()
         
-        maco_limit = 100  # Default 100 ppm
+        # Calculate MACO limit from sessions - use the lowest MACO found
+        maco_limit = 100.0  # Default fallback
+        valid_macos = []
         for session in sessions:
-            if session.lowest_maco and session.lowest_maco < maco_limit:
-                maco_limit = session.lowest_maco
+            if session.lowest_maco and session.lowest_maco > 0:
+                valid_macos.append(session.lowest_maco)
+        
+        if valid_macos:
+            maco_limit = min(valid_macos)
+        else:
+            # Try to get from any session without process_id filter
+            any_session = db.query(ValidationSession).filter(
+                ValidationSession.lowest_maco.isnot(None)
+            ).first()
+            if any_session and any_session.lowest_maco:
+                maco_limit = any_session.lowest_maco
         
         # Calculate capability index (Cpk)
         # Cpk = min(USL - mean, mean - LSL) / (3 * std_dev)
-        # LSL = 0 (lower specification limit)
         usl = maco_limit
-        lsl = 0
+        lsl = 0.0
         
         cpk_upper = (usl - mean_residue) / (3 * std_dev) if std_dev > 0 else 999
         cpk_lower = (mean_residue - lsl) / (3 * std_dev) if std_dev > 0 and mean_residue > lsl else 999

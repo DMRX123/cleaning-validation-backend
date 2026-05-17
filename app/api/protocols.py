@@ -11,6 +11,7 @@ from ..models.product import Product
 from ..services.protocol_service import ProtocolService
 import io
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -325,7 +326,3 @@ def get_protocol_results(protocol_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Get protocol results error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get results: {str(e)}")
-
-
-# Add missing import at the top
-import traceback

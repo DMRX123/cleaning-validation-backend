@@ -180,8 +180,7 @@ class ProtocolService:
     
     @staticmethod
     def check_consecutive_success(db: Session, protocol_id: int) -> dict:
-        from ..models.validation_protocol import ValidationProtocol, ProtocolExecutionResult
-        
+        """Check if validation has achieved required consecutive passes"""
         protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
         if not protocol:
             return {"error": "Protocol not found"}

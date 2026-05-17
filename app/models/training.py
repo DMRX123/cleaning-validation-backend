@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, Float, Float, Float  # Add Float here
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base

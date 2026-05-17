@@ -12,7 +12,7 @@ from ..services.rinse import RinseService
 from ..services.acceptability import AcceptabilityService
 from ..services.extra_area import ExtraAreaService
 from ..services.equipment_filter import EquipmentFilterService
-from .auth import get_current_user  # CHANGED
+from .auth import get_current_user
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -41,6 +41,7 @@ class SessionUpdate(BaseModel):
     rinse_limit_mg: Optional[float] = None
     rinse_limit_ppm: Optional[float] = None
     status: Optional[str] = None
+    process_id: Optional[int] = None  # NEW: Add process_id field
 
 class StandardPrepCreate(BaseModel):
     session_id: int
@@ -169,7 +170,8 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
         absorbance_std=data.absorbance_std,
         result_mg_ml=result["mg_ml"],
         result_ppm=result["ppm_numeric"],
-        reported=result["reported"]
+        reported=result["reported"],
+        below_loq=1 if result["below_loq"] else 0
     )
     db.add(new_result)
     db.commit()

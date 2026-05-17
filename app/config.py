@@ -13,6 +13,11 @@ class Config:
     # ============================================
     DATABASE_URL = os.getenv("DATABASE_URL", "")
     
+    # Normalize database URL (handle postgres:// vs postgresql://)
+    if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        logger.info("Normalized database URL from postgres:// to postgresql://")
+    
     # Log database connection (masked for security)
     if DATABASE_URL:
         masked_url = DATABASE_URL.split('@')[-1] if '@' in DATABASE_URL else 'database'

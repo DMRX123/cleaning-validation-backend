@@ -1,10 +1,24 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
+from ..models.cleaning_process import CleaningProcess
+from ..models.product import Product
+from ..models.standard_prep import StandardPrep
+from ..models.swab_result import SwabResult
+from ..models.rinse_result import RinseResult
+from ..models.session_equipment import SessionEquipment
+
 
 class ValidationSession(Base):
     __tablename__ = "validation_sessions"
+    __table_args__ = (
+        Index('idx_validation_sessions_previous_product', 'previous_product_id'),
+        Index('idx_validation_sessions_next_product', 'next_product_id'),
+        Index('idx_validation_sessions_process', 'process_id'),
+        Index('idx_validation_sessions_status', 'status'),
+        Index('idx_validation_sessions_code', 'session_code'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     session_code = Column(String, unique=True, nullable=False)
@@ -17,9 +31,12 @@ class ValidationSession(Base):
     previous_product_id = Column(Integer, ForeignKey("products.id"))
     next_product_id = Column(Integer, ForeignKey("products.id"))
     
-    # FIXED: Removed 'overlaps' parameter
+    # NEW: process_id for cleaning process relationship
+    process_id = Column(Integer, ForeignKey("cleaning_processes.id"), nullable=True)
+    
     previous_product = relationship("Product", foreign_keys=[previous_product_id])
     next_product = relationship("Product", foreign_keys=[next_product_id])
+    process = relationship("CleaningProcess", foreign_keys=[process_id])
     
     maco_10ppm = Column(Float, nullable=True)
     maco_tdd = Column(Float, nullable=True)

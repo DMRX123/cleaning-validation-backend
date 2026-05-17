@@ -37,25 +37,8 @@ app = FastAPI(
 )
 
 # ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "https://cleaning-validation-frontend.vercel.app",
-    "https://cleaning-validation.vercel.app",
-    "https://cleaning-validation-frontend-rc867u9b7-dmrx123s-projects.vercel.app",
-    "https://cleaning-validation-frontend-git-main.vercel.app",
-    "https://*.vercel.app"
-]
-
-env_origins = os.getenv("CORS_ORIGINS", "")
-if env_origins:
-    for origin in env_origins.split(","):
-        origin = origin.strip()
-        if origin and origin not in ALLOWED_ORIGINS:
-            ALLOWED_ORIGINS.append(origin)
+# Use config for CORS origins (single source of truth)
+ALLOWED_ORIGINS = config.get_cors_origins()
 
 logger.info("=" * 60)
 logger.info("CORS CONFIGURATION")

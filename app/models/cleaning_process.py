@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
@@ -16,6 +16,10 @@ class CleaningProcess(Base):
     Tracks complete cleaning process definition and parameters
     """
     __tablename__ = "cleaning_processes"
+    __table_args__ = (
+        Index('idx_cleaning_processes_code', 'process_code'),
+        Index('idx_cleaning_processes_active', 'is_active'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     process_code = Column(String, unique=True, nullable=False)
@@ -74,6 +78,7 @@ class CleaningProcess(Base):
     # Relationships
     parameters = relationship("CleaningParameter", back_populates="process")
     executions = relationship("CleaningExecution", back_populates="process")
+    validation_sessions = relationship("ValidationSession", back_populates="process")
 
 
 class CleaningParameter(Base):
@@ -81,6 +86,9 @@ class CleaningParameter(Base):
     Section 6.0 - Critical cleaning parameters tracking
     """
     __tablename__ = "cleaning_parameters"
+    __table_args__ = (
+        Index('idx_cleaning_parameters_process', 'process_id'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     process_id = Column(Integer, ForeignKey("cleaning_processes.id"))
@@ -109,6 +117,11 @@ class CleaningExecution(Base):
     Section 6.0 - Actual cleaning execution records
     """
     __tablename__ = "cleaning_executions"
+    __table_args__ = (
+        Index('idx_cleaning_executions_process', 'process_id'),
+        Index('idx_cleaning_executions_session', 'session_id'),
+        Index('idx_cleaning_executions_date', 'execution_date'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     process_id = Column(Integer, ForeignKey("cleaning_processes.id"))
@@ -143,3 +156,4 @@ class CleaningExecution(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     process = relationship("CleaningProcess", back_populates="executions")
+    session = relationship("ValidationSession", foreign_keys=[session_id])
