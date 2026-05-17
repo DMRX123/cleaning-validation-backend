@@ -12,7 +12,8 @@ from ..services.rinse import RinseService
 from ..services.acceptability import AcceptabilityService
 from ..services.extra_area import ExtraAreaService
 from ..services.equipment_filter import EquipmentFilterService
-from .auth import get_current_user
+from .auth import get_current_user  # ADDED
+from ..models.user import User  # ADDED
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -41,7 +42,7 @@ class SessionUpdate(BaseModel):
     rinse_limit_mg: Optional[float] = None
     rinse_limit_ppm: Optional[float] = None
     status: Optional[str] = None
-    process_id: Optional[int] = None  # NEW: Add process_id field
+    process_id: Optional[int] = None
 
 class StandardPrepCreate(BaseModel):
     session_id: int
@@ -66,8 +67,14 @@ class RinseResultCreate(BaseModel):
     absorbance_sample: float
     absorbance_std: float
 
+
 @router.post("/session")
-def create_session(data: SessionCreate, db: Session = Depends(get_db)):
+def create_session(
+    data: SessionCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Create a new validation session (Authenticated)"""
     session_code = f"VAL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
     
     new_session = ValidationSession(
@@ -88,14 +95,14 @@ def update_session(
     session_id: int, 
     data: SessionUpdate, 
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
 ):
     """Update validation session"""
     session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
     
     # Remove 'data' field if present as it's for nested storage
     if 'data' in update_data:
@@ -115,7 +122,11 @@ def update_session(
 
 
 @router.get("/session/{session_id}")
-def get_session(session_id: int, db: Session = Depends(get_db)):
+def get_session(
+    session_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
     session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -123,15 +134,22 @@ def get_session(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/history")
-def get_validation_history(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def get_validation_history(
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     """Get all validation sessions for history/chart"""
     sessions = db.query(ValidationSession).order_by(ValidationSession.created_at.desc()).all()
     return sessions
 
 
 @router.post("/standard-prep")
-def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)):
-    new_prep = StandardPrep(**data.dict())
+def create_standard_prep(
+    data: StandardPrepCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    new_prep = StandardPrep(**data.model_dump())
     factor = StandardService.calculate_dilution_factor(
         data.wt_of_std, data.first_dilution, data.second_dilution,
         data.third_dilution, data.fourth_dilution, data.fifth_dilution,
@@ -145,7 +163,11 @@ def create_standard_prep(data: StandardPrepCreate, db: Session = Depends(get_db)
 
 
 @router.post("/swab-result")
-def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
+def create_swab_result(
+    data: SwabResultCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
     """Create swab result with proper numeric handling"""
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
@@ -177,7 +199,6 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_result)
     
-    # Return enhanced response with both numeric and display values
     return {
         "id": new_result.id,
         "session_id": new_result.session_id,
@@ -193,7 +214,11 @@ def create_swab_result(data: SwabResultCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/rinse-result")
-def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
+def create_rinse_result(
+    data: RinseResultCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
     """Create rinse result with proper numeric handling"""
     session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
     prep = db.query(StandardPrep).filter(StandardPrep.session_id == data.session_id).first()
@@ -206,7 +231,7 @@ def create_rinse_result(data: RinseResultCreate, db: Session = Depends(get_db)):
     
     result = SwabService.calculate_result(
         data.absorbance_sample, data.absorbance_std,
-        prep.dilution_factor, 1,  # Rinse has different dilution
+        prep.dilution_factor, 1,
         recovery, loq
     )
     
