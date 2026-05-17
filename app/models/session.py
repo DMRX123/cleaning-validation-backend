@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Ind
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from ..database import Base
-from ..models.cleaning_process import CleaningProcess
 from ..models.product import Product
+from ..models.cleaning_process import CleaningProcess
 from ..models.standard_prep import StandardPrep
 from ..models.swab_result import SwabResult
 from ..models.rinse_result import RinseResult
@@ -30,12 +30,19 @@ class ValidationSession(Base):
     
     previous_product_id = Column(Integer, ForeignKey("products.id"))
     next_product_id = Column(Integer, ForeignKey("products.id"))
-    
-    # NEW: process_id for cleaning process relationship
     process_id = Column(Integer, ForeignKey("cleaning_processes.id"), nullable=True)
     
-    previous_product = relationship("Product", foreign_keys=[previous_product_id])
-    next_product = relationship("Product", foreign_keys=[next_product_id])
+    # FIXED: Added overlaps parameter to fix SAWarning
+    previous_product = relationship(
+        "Product", 
+        foreign_keys=[previous_product_id], 
+        overlaps="sessions_as_previous"
+    )
+    next_product = relationship(
+        "Product", 
+        foreign_keys=[next_product_id], 
+        overlaps="sessions_as_next"
+    )
     process = relationship("CleaningProcess", foreign_keys=[process_id])
     
     maco_10ppm = Column(Float, nullable=True)
@@ -54,4 +61,4 @@ class ValidationSession(Base):
     standard_prep = relationship("StandardPrep", back_populates="session", uselist=False)
     swab_results = relationship("SwabResult", back_populates="session")
     rinse_results = relationship("RinseResult", back_populates="session")
-    session_equipment = relationship("SessionEquipment", back_populates="session")  
+    session_equipment = relationship("SessionEquipment", back_populates="session")
