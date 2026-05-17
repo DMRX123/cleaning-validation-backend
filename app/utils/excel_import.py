@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 from ..models.product import Product
 from ..models.equipment import Equipment
 
-async def import_products_from_excel(file: UploadFile, db: Session) -> dict:
-    """Import products from Excel file matching the original structure"""
+
+def import_products_from_excel(file: UploadFile, db: Session) -> dict:
+    """Import products from Excel file matching the original structure (SYNC VERSION)"""
     
-    contents = await file.read()
+    contents = file.file.read()
     workbook = openpyxl.load_workbook(io.BytesIO(contents))
     
     # Try to find the correct sheet
@@ -41,6 +42,7 @@ async def import_products_from_excel(file: UploadFile, db: Session) -> dict:
             # Map Excel columns to model fields
             product = Product(
                 name=str(product_name),
+                product_code=str(sheet.cell(row, 2).value) if sheet.cell(row, 2).value else None,
                 min_batch_size=float(sheet.cell(row, 4).value or 0),
                 max_batch_size=float(sheet.cell(row, 5).value or 0),
                 ade_pde=float(sheet.cell(row, 6).value or 0),
@@ -64,6 +66,9 @@ async def import_products_from_excel(file: UploadFile, db: Session) -> dict:
     
     db.commit()
     
+    # Close the file
+    file.file.close()
+    
     return {
         "message": f"Import completed",
         "imported": imported_count,
@@ -72,10 +77,10 @@ async def import_products_from_excel(file: UploadFile, db: Session) -> dict:
     }
 
 
-async def import_equipment_from_excel(file: UploadFile, db: Session) -> dict:
-    """Import equipment from Excel file"""
+def import_equipment_from_excel(file: UploadFile, db: Session) -> dict:
+    """Import equipment from Excel file (SYNC VERSION)"""
     
-    contents = await file.read()
+    contents = file.file.read()
     workbook = openpyxl.load_workbook(io.BytesIO(contents))
     
     sheet = None
@@ -119,6 +124,9 @@ async def import_equipment_from_excel(file: UploadFile, db: Session) -> dict:
             continue
     
     db.commit()
+    
+    # Close the file
+    file.file.close()
     
     return {
         "message": f"Import completed",
