@@ -17,6 +17,8 @@ from .api import (
 )
 from .database import init_db, get_db
 from .config import config
+
+# FIXED: RateLimitMiddleware import (after creating the file)
 from .middleware.ratelimit import RateLimitMiddleware
 
 # Setup logging
@@ -36,7 +38,6 @@ app = FastAPI(
 )
 
 # ==================== CORS MIDDLEWARE (MUST BE FIRST) ====================
-# Use config for CORS origins (single source of truth)
 ALLOWED_ORIGINS = config.get_cors_origins()
 
 logger.info("=" * 60)
@@ -120,7 +121,6 @@ def setup_database_on_startup():
         
         db = SessionLocal()
         try:
-            # Check if users table exists and has users
             user_count = db.query(User).count()
             logger.info(f"Found {user_count} users in database")
             
@@ -137,7 +137,6 @@ def setup_database_on_startup():
                 db.commit()
                 logger.info("✅ Admin user created: admin / Admin@123")
                 
-                # Create cleaning levels
                 try:
                     from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
                     existing_levels = db.query(CleaningLevel).count()
@@ -166,7 +165,6 @@ def setup_database_on_startup():
                 except Exception as e:
                     logger.warning(f"⚠️ Could not create cleaning levels: {e}")
                 
-                # Seed static data
                 try:
                     seed_script = os.path.join(os.path.dirname(__file__), "..", "scripts", "seed_static_data.py")
                     if os.path.exists(seed_script):
@@ -279,6 +277,7 @@ app.include_router(protocols.router, prefix="/api/protocols", tags=["Validation 
 app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance"])
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 app.include_router(training.router, prefix="/api/training", tags=["Training"])
+# FIXED: formulation router now has NO prefix, so adding /api/formulation here
 app.include_router(formulation.router, prefix="/api/formulation", tags=["Formulation Plants"])
 
 # ==================== API INFO ENDPOINT ====================
