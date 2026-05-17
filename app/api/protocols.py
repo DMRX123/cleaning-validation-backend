@@ -9,6 +9,8 @@ from ..models.validation_protocol import ValidationProtocol, ProtocolExecutionRe
 from ..models.equipment import Equipment
 from ..models.product import Product
 from ..services.protocol_service import ProtocolService
+from .auth import get_current_user  # ADDED
+from ..models.user import User  # ADDED
 import io
 import logging
 import traceback
@@ -35,9 +37,14 @@ class ExecuteProtocolRequest(BaseModel):
 
 
 @router.post("/create")
-def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db)):
+def create_protocol(
+    request: CreateProtocolRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Create a new validation protocol (Authenticated)"""
     try:
-        logger.info(f"Creating protocol for equipment {request.equipment_id}")
+        logger.info(f"Creating protocol for equipment {request.equipment_id} by user: {current_user.username}")
         
         equipment = db.query(Equipment).filter(Equipment.id == request.equipment_id).first()
         if not equipment:
@@ -85,7 +92,12 @@ def create_protocol(request: CreateProtocolRequest, db: Session = Depends(get_db
 
 
 @router.get("/{protocol_id}")
-def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
+def get_protocol(
+    protocol_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Get protocol by ID (Authenticated)"""
     try:
         protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
         if not protocol:
@@ -97,7 +109,12 @@ def get_protocol(protocol_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{protocol_id}/pdf")
-def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
+def download_protocol_pdf(
+    protocol_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Download protocol as PDF (Authenticated)"""
     from reportlab.lib.pagesizes import A4
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -228,7 +245,12 @@ def download_protocol_pdf(protocol_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/execute")
-def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_db)):
+def execute_protocol(
+    request: ExecuteProtocolRequest, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Execute a validation protocol run (Authenticated)"""
     try:
         protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == request.protocol_id).first()
         if not protocol:
@@ -294,7 +316,12 @@ def execute_protocol(request: ExecuteProtocolRequest, db: Session = Depends(get_
 
 
 @router.get("/{protocol_id}/results")
-def get_protocol_results(protocol_id: int, db: Session = Depends(get_db)):
+def get_protocol_results(
+    protocol_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ADDED AUTH
+):
+    """Get all execution results for a protocol (Authenticated)"""
     try:
         protocol = db.query(ValidationProtocol).filter(ValidationProtocol.id == protocol_id).first()
         if not protocol:
