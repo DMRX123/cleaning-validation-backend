@@ -34,25 +34,30 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== CORS MIDDLEWARE (FINAL - COMPLETE CONFIGURATION) ====================
+# ==================== CORS MIDDLEWARE (FORCE ALLOW ALL FOR PRODUCTION) ====================
 
-# Get CORS origins from config
-ALLOWED_ORIGINS = config.get_cors_origins()
-ALLOW_ALL_ORIGINS = config.ALLOW_ALL_ORIGINS
+# FORCE: Allow all origins for production (temporary fix)
+# After CORS is confirmed working, you can revert to config-based
+FORCE_ALLOW_ALL_ORIGINS = True  # Set to False after testing
+
+if FORCE_ALLOW_ALL_ORIGINS:
+    CORS_ALLOW_ORIGINS = ["*"]
+    CORS_MODE = "allow_all_forced"
+    logger.info("⚠️ CORS: FORCE ALLOWING ALL ORIGINS (*) - Temporary fix for production")
+else:
+    CORS_ALLOW_ORIGINS = config.get_cors_origins()
+    CORS_MODE = "allow_all" if config.ALLOW_ALL_ORIGINS else "restricted"
+    logger.info("🌐 CORS: Using config-based origins")
 
 logger.info("=" * 60)
 logger.info("🌐 CORS FINAL CONFIGURATION")
-if ALLOW_ALL_ORIGINS:
-    logger.info("   Mode: ALLOW ALL ORIGINS (*)")
-else:
-    logger.info(f"   Mode: Specific Origins ({len(ALLOWED_ORIGINS)} origins)")
-    for origin in ALLOWED_ORIGINS:
-        logger.info(f"     - {origin}")
+logger.info(f"   Mode: {CORS_MODE}")
+logger.info(f"   Origins: {CORS_ALLOW_ORIGINS}")
 logger.info("=" * 60)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=CORS_ALLOW_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
@@ -74,6 +79,13 @@ async def log_requests(request: Request, call_next):
     start_time = datetime.now()
     response = await call_next(request)
     process_time = (datetime.now() - start_time).total_seconds()
+    
+    # Add CORS headers to every response (safety)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
     logger.info(
         f"{request.method} {request.url.path} - "
         f"Status: {response.status_code} - "
@@ -90,13 +102,30 @@ async def options_handler(path: str):
         status_code=200,
         content={"message": "OK"},
         headers={
-            "Access-Control-Allow-Origin": "*" if ALLOW_ALL_ORIGINS else ", ".join(ALLOWED_ORIGINS) if ALLOWED_ORIGINS else "*",
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Max-Age": "3600",
         }
     )
+
+# ==================== TRAILING SLASH REDIRECT FIX ====================
+@app.middleware("http")
+async def add_trailing_slash(request: Request, call_next):
+    """Fix 405 errors by redirecting /api/products to /api/products/"""
+    path = request.url.path
+    # Skip if path already ends with slash or has dot (static files)
+    if not path.endswith('/') and '.' not in path.split('/')[-1]:
+        # Redirect to same path with trailing slash
+        new_url = str(request.url) + '/'
+        response = JSONResponse(
+            status_code=307,  # Temporary redirect
+            content={"message": f"Redirecting to {new_url}"},
+            headers={"Location": new_url}
+        )
+        return response
+    return await call_next(request)
 
 # ==================== EXCEPTION HANDLERS ====================
 @app.exception_handler(HTTPException)
@@ -108,7 +137,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": exc.detail,
             "status_code": exc.status_code,
             "timestamp": datetime.now().isoformat()
-        }
+        },
+        headers={"Access-Control-Allow-Origin": "*"}
     )
 
 @app.exception_handler(RequestValidationError)
@@ -120,7 +150,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "Validation Error",
             "details": exc.errors(),
             "timestamp": datetime.now().isoformat()
-        }
+        },
+        headers={"Access-Control-Allow-Origin": "*"}
     )
 
 @app.exception_handler(Exception)
@@ -132,7 +163,8 @@ async def general_exception_handler(request: Request, exc: Exception):
             "success": False,
             "error": "Internal server error",
             "timestamp": datetime.now().isoformat()
-        }
+        },
+        headers={"Access-Control-Allow-Origin": "*"}
     )
 
 # ==================== AUTO DATABASE SETUP FUNCTION ====================
@@ -187,6 +219,19 @@ def setup_database_on_startup():
                         logger.info("✅ Cleaning levels created")
                 except Exception as e:
                     logger.warning(f"⚠️ Could not create cleaning levels: {e}")
+                
+                # Run direct SQL to add missing columns if needed
+                try:
+                    db.execute(text("""
+                        ALTER TABLE products ADD COLUMN IF NOT EXISTS product_code VARCHAR;
+                        ALTER TABLE products ADD COLUMN IF NOT EXISTS toxicity_class INTEGER DEFAULT 3;
+                        ALTER TABLE products ADD COLUMN IF NOT EXISTS potency_class INTEGER DEFAULT 3;
+                        ALTER TABLE products ADD COLUMN IF NOT EXISTS cleanability_rating INTEGER DEFAULT 2;
+                    """))
+                    db.commit()
+                    logger.info("✅ Product columns verified/created")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not verify product columns: {e}")
             else:
                 logger.info(f"✅ Database already has {user_count} users.")
                 
@@ -209,9 +254,7 @@ async def startup_event():
     logger.info(f"   Environment: {config.ENVIRONMENT}")
     logger.info(f"   Debug mode: {config.DEBUG}")
     logger.info(f"   API Version: {config.API_VERSION}")
-    logger.info(f"   CORS Mode: {'Allow All' if ALLOW_ALL_ORIGINS else 'Restricted'}")
-    if not ALLOW_ALL_ORIGINS:
-        logger.info(f"   CORS Origins: {len(ALLOWED_ORIGINS)} origins configured")
+    logger.info(f"   CORS Mode: {CORS_MODE}")
     try:
         init_db()
         logger.info("✅ Database tables ready")
@@ -220,7 +263,7 @@ async def startup_event():
         logger.info("🎉 Cleaning Validation API is READY!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
         logger.info("🏭 Formulation Plants: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
-        logger.info("🌐 CORS: Enabled for frontend")
+        logger.info("🌐 CORS: Enabled for all origins (temporary fix)")
         logger.info("🔒 Rate Limiting: 100 requests/minute")
         logger.info("=" * 60)
     except Exception as e:
@@ -248,7 +291,7 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
-        "cors_mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
+        "cors_mode": CORS_MODE,
         "rate_limiting_enabled": True,
         "environment": config.ENVIRONMENT
     }
@@ -311,9 +354,8 @@ def api_info():
             "inhalation": "Nasal Sprays, Inhalers"
         },
         "cors_configuration": {
-            "mode": "allow_all" if ALLOW_ALL_ORIGINS else "restricted",
-            "allowed_origins_count": len(ALLOWED_ORIGINS),
-            "allowed_origins": ALLOWED_ORIGINS if not ALLOW_ALL_ORIGINS else ["*"]
+            "mode": CORS_MODE,
+            "allowed_origins": CORS_ALLOW_ORIGINS
         },
         "rate_limiting": {
             "enabled": True,
