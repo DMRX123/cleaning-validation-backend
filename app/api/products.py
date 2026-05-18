@@ -29,7 +29,6 @@ def get_products(
             query = query.filter(Product.plant == plant)
         products = query.all()
         
-        # Convert to dict to avoid ORM issues
         result = []
         for p in products:
             result.append({
@@ -233,9 +232,14 @@ def update_product(
         
         old_values = product.__dict__.copy()
         
-        update_dict = product_data.dict(exclude_unset=True)
+        # Only update fields that are provided (not None)
+        update_dict = product_data.model_dump(exclude_unset=True)
+        
+        # Log what we're updating
+        logger.info(f"Updating product {product_id} with: {update_dict.keys()}")
+        
         for key, value in update_dict.items():
-            if value is not None:
+            if value is not None and hasattr(product, key):
                 setattr(product, key, value)
         
         db.commit()
@@ -300,13 +304,18 @@ def delete_product(
 
 
 @router.post("/import")
-async def import_products(
+def import_products(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    result = await import_products_from_excel(file, db)
-    return result
+    """Import products from Excel file"""
+    try:
+        result = import_products_from_excel(file, db)
+        return result
+    except Exception as e:
+        logger.error(f"Import products error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/plant/{plant_name}/worst-case")
@@ -361,7 +370,6 @@ def get_all_products_with_ratings(
         rating = WorstCaseService.calculate_product_rating(product)
         ratings.append(rating)
     
-    # Sort by total rating (highest first)
     ratings.sort(key=lambda x: x["total_rating"], reverse=True)
     
     return {
