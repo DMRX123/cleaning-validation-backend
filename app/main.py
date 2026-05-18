@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -7,8 +7,6 @@ from sqlalchemy import text
 from datetime import datetime
 import logging
 import os
-import subprocess
-import sys
 
 from .api import (
     auth, products, equipment, calculations, validation, 
@@ -18,7 +16,7 @@ from .api import (
 from .database import init_db, get_db
 from .config import config
 
-# Setup logging
+# Setup logging - FIXED: single configuration
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -34,20 +32,9 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# ==================== CORS MIDDLEWARE (FORCE ALLOW ALL FOR PRODUCTION) ====================
-
-# FORCE: Allow all origins for production (temporary fix)
-# After CORS is confirmed working, you can revert to config-based
-FORCE_ALLOW_ALL_ORIGINS = True  # Set to False after testing
-
-if FORCE_ALLOW_ALL_ORIGINS:
-    CORS_ALLOW_ORIGINS = ["*"]
-    CORS_MODE = "allow_all_forced"
-    logger.info("⚠️ CORS: FORCE ALLOWING ALL ORIGINS (*) - Temporary fix for production")
-else:
-    CORS_ALLOW_ORIGINS = config.get_cors_origins()
-    CORS_MODE = "allow_all" if config.ALLOW_ALL_ORIGINS else "restricted"
-    logger.info("🌐 CORS: Using config-based origins")
+# ==================== CORS MIDDLEWARE ====================
+CORS_ALLOW_ORIGINS = ["*"]  # Allow all for production
+CORS_MODE = "allow_all"
 
 logger.info("=" * 60)
 logger.info("🌐 CORS FINAL CONFIGURATION")
@@ -59,7 +46,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -69,7 +56,7 @@ app.add_middleware(
 try:
     from .middleware.ratelimit import RateLimitMiddleware
     app.add_middleware(RateLimitMiddleware, calls=100, period=60)
-    logger.info("✅ Rate limiting middleware enabled (100 requests per 60 seconds)")
+    logger.info("✅ Rate limiting middleware enabled")
 except ImportError as e:
     logger.warning(f"⚠️ Rate limiting middleware not loaded: {e}")
 
@@ -77,13 +64,14 @@ except ImportError as e:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
+    
+    # Add CORS headers to every response
     response = await call_next(request)
     process_time = (datetime.now() - start_time).total_seconds()
     
-    # Add CORS headers to every response (safety)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "*"
     
     logger.info(
@@ -94,6 +82,104 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
+# ==================== FIXED: HEALTH ENDPOINT (GET method) ====================
+@app.get("/health")
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint - GET method"""
+    db_status = "healthy"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+        logger.warning(f"Database health check failed: {str(e)}")
+    
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "version": config.API_VERSION,
+        "database": db_status,
+        "timestamp": datetime.now().isoformat(),
+        "cors_enabled": True,
+        "cors_mode": CORS_MODE,
+        "rate_limiting_enabled": True,
+        "environment": config.ENVIRONMENT
+    }
+
+# ==================== FIXED: COMPREHENSIVE TRAILING SLASH HANDLER ====================
+@app.middleware("http")
+async def fix_trailing_slash(request: Request, call_next):
+    """Fix 405 errors by redirecting /api/xxx to /api/xxx/ for GET requests"""
+    path = request.url.path
+    
+    # Skip if path already ends with slash, has dot (static files), or not GET
+    if path.endswith('/') or '.' in path.split('/')[-1] or request.method != "GET":
+        return await call_next(request)
+    
+    # List of API paths that need trailing slash
+    api_paths = [
+        "/api/products", "/api/equipment", "/api/static/plants", 
+        "/api/static/solubility", "/api/static/difficulty", "/api/static/equipment-types",
+        "/api/training/modules", "/api/training/records",
+        "/api/cleaning-process", "/api/cleaning-validation/microbiological-limits",
+        "/api/formulation/dosage-forms", "/api/dashboard/stats", "/api/dashboard/recent-activity",
+        "/api/validation/history", "/api/guidance/guidance/questions"
+    ]
+    
+    if path in api_paths or path.startswith("/api/") and len(path.split('/')) >= 3:
+        new_url = str(request.url) + '/'
+        logger.info(f"Redirecting GET {path} to {new_url}")
+        return RedirectResponse(url=new_url, status_code=307)
+    
+    return await call_next(request)
+
+# ==================== API ROUTE ALIASES (Direct redirects) ====================
+@app.get("/api/products")
+async def products_redirect():
+    return RedirectResponse(url="/api/products/", status_code=307)
+
+@app.get("/api/equipment")
+async def equipment_redirect():
+    return RedirectResponse(url="/api/equipment/", status_code=307)
+
+@app.get("/api/cleaning-process")
+async def cleaning_process_redirect():
+    return RedirectResponse(url="/api/cleaning-process/", status_code=307)
+
+@app.get("/api/validation/history")
+async def validation_history_redirect():
+    return RedirectResponse(url="/api/validation/history/", status_code=307)
+
+@app.get("/api/static/plants")
+async def static_plants_redirect():
+    return RedirectResponse(url="/api/static/plants/", status_code=307)
+
+@app.get("/api/static/solubility")
+async def static_solubility_redirect():
+    return RedirectResponse(url="/api/static/solubility/", status_code=307)
+
+@app.get("/api/static/difficulty")
+async def static_difficulty_redirect():
+    return RedirectResponse(url="/api/static/difficulty/", status_code=307)
+
+@app.get("/api/static/equipment-types")
+async def static_equipment_types_redirect():
+    return RedirectResponse(url="/api/static/equipment-types/", status_code=307)
+
+@app.get("/api/training/modules")
+async def training_modules_redirect():
+    return RedirectResponse(url="/api/training/modules/", status_code=307)
+
+@app.get("/api/formulation/dosage-forms")
+async def dosage_forms_redirect():
+    return RedirectResponse(url="/api/formulation/dosage-forms/", status_code=307)
+
+@app.get("/api/dashboard/stats")
+async def dashboard_stats_redirect():
+    return RedirectResponse(url="/api/dashboard/stats/", status_code=307)
+
+@app.get("/api/guidance/guidance/questions")
+async def guidance_questions_redirect():
+    return RedirectResponse(url="/api/guidance/guidance/questions/", status_code=307)
+
 # ==================== OPTIONS HANDLER FOR CORS PREFLIGHT ====================
 @app.options("/{path:path}")
 async def options_handler(path: str):
@@ -103,66 +189,12 @@ async def options_handler(path: str):
         content={"message": "OK"},
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Max-Age": "3600",
         }
     )
-
-# ==================== TRAILING SLASH REDIRECT FIX (FIXED) ====================
-@app.middleware("http")
-async def add_trailing_slash(request: Request, call_next):
-    """
-    Fix 405 errors by redirecting /api/products to /api/products/
-    IMPORTANT: Only redirect GET requests to avoid breaking POST/PUT/DELETE
-    """
-    path = request.url.path
-    
-    # Skip if:
-    # 1. Path already ends with slash
-    # 2. Path has dot (static files like .css, .js)
-    # 3. Method is not GET (POST, PUT, DELETE should not be redirected)
-    if not path.endswith('/') and '.' not in path.split('/')[-1] and request.method == "GET":
-        new_url = str(request.url) + '/'
-        logger.info(f"Redirecting GET {path} to {new_url}")
-        response = JSONResponse(
-            status_code=307,  # Temporary redirect
-            content={"message": f"Redirecting to {new_url}"},
-            headers={"Location": new_url}
-        )
-        return response
-    
-    return await call_next(request)
-
-
-# ==================== API ROUTE ALIASES (For frontend compatibility) ====================
-# Some frontend calls may not have trailing slash - add aliases for common routes
-
-@app.get("/api/products")
-def products_redirect():
-    """Redirect /api/products to /api/products/"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/products/", status_code=307)
-
-@app.get("/api/equipment")
-def equipment_redirect():
-    """Redirect /api/equipment to /api/equipment/"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/equipment/", status_code=307)
-
-@app.get("/api/cleaning-process")
-def cleaning_process_redirect():
-    """Redirect /api/cleaning-process to /api/cleaning-process/"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/cleaning-process/", status_code=307)
-
-@app.get("/api/validation/history")
-def validation_history_redirect():
-    """Redirect /api/validation/history to /api/validation/history/"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/validation/history/", status_code=307)
-
 
 # ==================== EXCEPTION HANDLERS ====================
 @app.exception_handler(HTTPException)
@@ -204,8 +236,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
-
-# ==================== AUTO DATABASE SETUP FUNCTION ====================
+# ==================== DATABASE SETUP FUNCTION ====================
 def setup_database_on_startup():
     try:
         from app.database import SessionLocal
@@ -271,20 +302,16 @@ def setup_database_on_startup():
                     logger.info("✅ Product columns verified/created")
                 except Exception as e:
                     logger.warning(f"⚠️ Could not verify product columns: {e}")
+                    
             else:
                 logger.info(f"✅ Database already has {user_count} users.")
                 
         except Exception as e:
             logger.warning(f"⚠️ Setup check warning: {e}")
-            import traceback
-            traceback.print_exc()
         finally:
             db.close()
     except Exception as e:
         logger.error(f"❌ Auto-setup error: {e}")
-        import traceback
-        traceback.print_exc()
-
 
 # ==================== LIFESPAN EVENTS ====================
 @app.on_event("startup")
@@ -302,43 +329,17 @@ async def startup_event():
         logger.info("=" * 60)
         logger.info("🎉 Cleaning Validation API is READY!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("🏭 Formulation Plants: OSD, Sterile, Liquid, Ophthalmic, Topical, Inhalation")
-        logger.info("🌐 CORS: Enabled for all origins (temporary fix)")
+        logger.info("🌐 CORS: Enabled for all origins")
         logger.info("🔒 Rate Limiting: 100 requests/minute")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("🛑 Shutting down Cleaning Validation API...")
 
-
-# ==================== HEALTH & ROOT ENDPOINTS ====================
-@app.get("/health")
-def health_check(db: Session = Depends(get_db)):
-    db_status = "healthy"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
-        logger.warning(f"Database health check failed: {str(e)}")
-    
-    return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
-        "version": config.API_VERSION,
-        "database": db_status,
-        "timestamp": datetime.now().isoformat(),
-        "cors_enabled": True,
-        "cors_mode": CORS_MODE,
-        "rate_limiting_enabled": True,
-        "environment": config.ENVIRONMENT
-    }
-
-
+# ==================== ROOT ENDPOINT ====================
 @app.get("/")
 def root():
     return {
@@ -347,18 +348,8 @@ def root():
         "version": config.API_VERSION,
         "documentation": "/docs",
         "apic_compliance": "100%",
-        "guideline_version": "APIC Cleaning Validation Guide 2021",
-        "supported_plants": [
-            "API Manufacturing",
-            "OSD (Tablets/Capsules)",
-            "Sterile Injectables",
-            "Liquid Orals",
-            "Ophthalmic",
-            "Topical (Creams/Ointments)",
-            "Inhalation"
-        ]
+        "guideline_version": "APIC Cleaning Validation Guide 2021"
     }
-
 
 # ==================== ROUTERS ====================
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
@@ -375,36 +366,3 @@ app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 app.include_router(training.router, prefix="/api/training", tags=["Training"])
 app.include_router(formulation.router, prefix="/api/formulation", tags=["Formulation Plants"])
-
-
-# ==================== API INFO ENDPOINT ====================
-@app.get("/api/info")
-def api_info():
-    return {
-        "name": config.API_TITLE,
-        "version": config.API_VERSION,
-        "description": config.API_DESCRIPTION,
-        "status": "production_ready",
-        "statistics": {
-            "total_endpoints": 75,
-            "total_calculations": 35,
-            "total_models": 32,
-            "apic_sections_covered": "30/30 (100%)"
-        },
-        "formulation_support": {
-            "osd": "Tablets, Capsules, Powders, Granules",
-            "sterile": "Injectables, Infusions, Ophthalmic",
-            "liquid": "Oral Solutions, Suspensions, Syrups",
-            "topical": "Creams, Ointments, Gels",
-            "inhalation": "Nasal Sprays, Inhalers"
-        },
-        "cors_configuration": {
-            "mode": CORS_MODE,
-            "allowed_origins": CORS_ALLOW_ORIGINS
-        },
-        "rate_limiting": {
-            "enabled": True,
-            "calls_per_minute": 100
-        },
-        "environment": config.ENVIRONMENT
-    }

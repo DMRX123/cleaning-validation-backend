@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Seed static data into database"""
+"""Seed static data into database - FIXED with dosage forms"""
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,6 +9,7 @@ from datetime import datetime
 from app.database import SessionLocal
 from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
 from app.models.microbiological import MicrobiologicalLimit
+from app.models.dosage_form import DosageForm, DosageFormEnum, PlantTypeEnum
 
 def seed_cleaning_levels(db):
     """Seed cleaning levels data"""
@@ -59,6 +60,7 @@ def seed_cleaning_levels(db):
     
     db.commit()
     print("Cleaning levels seeded successfully!")
+
 
 def seed_microbiological_limits(db):
     """Seed default microbiological limits"""
@@ -124,6 +126,51 @@ def seed_microbiological_limits(db):
     db.commit()
     print("Microbiological limits seeded successfully!")
 
+
+def seed_dosage_forms(db):
+    """Seed dosage forms data - NEW"""
+    dosage_forms = [
+        {"name": "Tablet", "code": DosageFormEnum.TABLET, "plant_type": PlantTypeEnum.FORMULATION_OSD,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 1000},
+        {"name": "Capsule", "code": DosageFormEnum.CAPSULE, "plant_type": PlantTypeEnum.FORMULATION_OSD,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 1000},
+        {"name": "Powder", "code": DosageFormEnum.POWDER, "plant_type": PlantTypeEnum.FORMULATION_OSD,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 1000},
+        {"name": "Injectable", "code": DosageFormEnum.INJECTABLE, "plant_type": PlantTypeEnum.FORMULATION_STERILE,
+         "requires_sterility": True, "requires_endotoxin_testing": True, "default_microbial_limit_cfu": 1, "default_endotoxin_limit_eu_ml": 0.25},
+        {"name": "Oral Solution", "code": DosageFormEnum.ORAL_SOLUTION, "plant_type": PlantTypeEnum.FORMULATION_LIQUID,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+        {"name": "Cream", "code": DosageFormEnum.CREAM, "plant_type": PlantTypeEnum.FORMULATION_TOPICAL,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+        {"name": "Ointment", "code": DosageFormEnum.OINTMENT, "plant_type": PlantTypeEnum.FORMULATION_TOPICAL,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+        {"name": "Ophthalmic", "code": DosageFormEnum.OPHTHALMIC, "plant_type": PlantTypeEnum.FORMULATION_OPHTHALMIC,
+         "requires_sterility": True, "requires_endotoxin_testing": True, "default_microbial_limit_cfu": 1, "default_endotoxin_limit_eu_ml": 0.25},
+        {"name": "Nasal", "code": DosageFormEnum.NASAL, "plant_type": PlantTypeEnum.FORMULATION_STERILE,
+         "requires_sterility": True, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 10},
+        {"name": "Inhalation", "code": DosageFormEnum.INHALATION, "plant_type": PlantTypeEnum.FORMULATION_INHALATION,
+         "requires_sterility": True, "requires_endotoxin_testing": True, "default_microbial_limit_cfu": 10, "default_endotoxin_limit_eu_ml": 0.25},
+        {"name": "Gel", "code": DosageFormEnum.GEL, "plant_type": PlantTypeEnum.FORMULATION_TOPICAL,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+        {"name": "Syrup", "code": DosageFormEnum.SYRUP, "plant_type": PlantTypeEnum.FORMULATION_LIQUID,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+        {"name": "Suspension", "code": DosageFormEnum.ORAL_SUSPENSION, "plant_type": PlantTypeEnum.FORMULATION_LIQUID,
+         "requires_sterility": False, "requires_endotoxin_testing": False, "default_microbial_limit_cfu": 100},
+    ]
+    
+    for df_data in dosage_forms:
+        existing = db.query(DosageForm).filter(DosageForm.code == df_data["code"]).first()
+        if not existing:
+            dosage_form = DosageForm(**df_data)
+            db.add(dosage_form)
+            print(f"Added dosage form: {df_data['name']}")
+        else:
+            print(f"Dosage form already exists: {df_data['name']}")
+    
+    db.commit()
+    print("Dosage forms seeded successfully!")
+
+
 def main():
     print("=" * 50)
     print("Seeding Static Data for Cleaning Validation System")
@@ -135,12 +182,17 @@ def main():
         print("-" * 30)
         seed_microbiological_limits(db)
         print("-" * 30)
+        seed_dosage_forms(db)
+        print("-" * 30)
         print("✅ Static data seeding completed successfully!")
     except Exception as e:
         print(f"❌ Error seeding data: {str(e)}")
         db.rollback()
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     main()

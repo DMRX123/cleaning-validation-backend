@@ -6,14 +6,16 @@ from .auth import get_current_user
 from ..services.guidance_service import GuidanceService
 from ..schemas.guidance import GuidanceQuestionResponse, RevalidationCheckRequest, RevalidationCheckResponse
 
-router = APIRouter(prefix="/guidance", tags=["APIC Guidance"])
+router = APIRouter(tags=["APIC Guidance"])
+
 
 @router.get("/questions", response_model=List[GuidanceQuestionResponse])
 def get_validation_questions(current_user = Depends(get_current_user)):
     """
-    Section 10.0 - Get all validation FAQs with answers
+    Section 10.0 - Get all validation FAQs with answers - FIXED
     """
     return GuidanceService.get_all_questions()
+
 
 @router.post("/revalidation-check", response_model=RevalidationCheckResponse)
 def check_revalidation_needed(

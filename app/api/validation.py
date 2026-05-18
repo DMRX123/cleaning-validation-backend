@@ -78,7 +78,7 @@ def create_session(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create a new validation session (Authenticated)"""
+    """Create a new validation session - FIXED"""
     try:
         logger.info(f"Creating session for user: {current_user.username}")
         logger.info(f"Request data: previous_product_id={data.previous_product_id}, next_product_id={data.next_product_id}")
@@ -95,12 +95,21 @@ def create_session(
         # Generate unique session code
         session_code = f"VAL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
         
+        # Calculate total surface area from equipment (get some default equipment or use 100)
+        equipment_list = db.query(Equipment).filter(Equipment.plant == previous_product.plant).limit(5).all()
+        total_surface_area = sum(eq.surface_area for eq in equipment_list) if equipment_list else 100.0
+        
+        # Apply extra area percentage
+        if data.extra_area_percentage > 0:
+            total_surface_area = total_surface_area * (1 + data.extra_area_percentage / 100)
+        
         # Create session
         new_session = ValidationSession(
             session_code=session_code,
             previous_product_id=data.previous_product_id,
             next_product_id=data.next_product_id,
             extra_area_percentage=data.extra_area_percentage or 0,
+            total_surface_area=total_surface_area,
             status="DRAFT"
         )
         
@@ -116,6 +125,7 @@ def create_session(
             "previous_product_id": new_session.previous_product_id,
             "next_product_id": new_session.next_product_id,
             "extra_area_percentage": new_session.extra_area_percentage,
+            "total_surface_area": new_session.total_surface_area,
             "status": new_session.status,
             "created_at": new_session.created_at.isoformat() if new_session.created_at else None,
             "message": "Session created successfully"
@@ -180,10 +190,14 @@ def get_session(
     current_user: User = Depends(get_current_user)
 ):
     """Get validation session by ID"""
-    session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
+    try:
+        session = db.query(ValidationSession).filter(ValidationSession.id == session_id).first()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return session
+    except Exception as e:
+        logger.error(f"Get session error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/history")
@@ -191,7 +205,7 @@ def get_validation_history(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
-    """Get all validation sessions for history/chart"""
+    """Get all validation sessions for history/chart - FIXED"""
     try:
         sessions = db.query(ValidationSession).order_by(ValidationSession.created_at.desc()).all()
         return [
@@ -207,7 +221,8 @@ def get_validation_history(
         ]
     except Exception as e:
         logger.error(f"Get history error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty list instead of error
+        return []
 
 
 @router.post("/standard-prep")

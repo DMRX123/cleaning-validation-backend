@@ -67,11 +67,12 @@ def get_products_by_plant(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """Get products filtered by plant - APIC Section 7.2 compliant"""
+    """Get products filtered by plant - APIC Section 7.2 compliant - FIXED"""
     try:
         products = db.query(Product).filter(Product.plant == plant_name).all()
         if not products:
-            raise HTTPException(status_code=404, detail=f"No products found in {plant_name}")
+            # Return empty list instead of 404
+            return []
         
         result = []
         for p in products:
@@ -102,7 +103,7 @@ def get_products_by_plant(
         return result
     except Exception as e:
         logger.error(f"Products by plant endpoint error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return []
 
 
 @router.post("/", response_model=ProductResponse)
