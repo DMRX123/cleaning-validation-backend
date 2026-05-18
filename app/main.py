@@ -110,22 +110,59 @@ async def options_handler(path: str):
         }
     )
 
-# ==================== TRAILING SLASH REDIRECT FIX ====================
+# ==================== TRAILING SLASH REDIRECT FIX (FIXED) ====================
 @app.middleware("http")
 async def add_trailing_slash(request: Request, call_next):
-    """Fix 405 errors by redirecting /api/products to /api/products/"""
+    """
+    Fix 405 errors by redirecting /api/products to /api/products/
+    IMPORTANT: Only redirect GET requests to avoid breaking POST/PUT/DELETE
+    """
     path = request.url.path
-    # Skip if path already ends with slash or has dot (static files)
-    if not path.endswith('/') and '.' not in path.split('/')[-1]:
-        # Redirect to same path with trailing slash
+    
+    # Skip if:
+    # 1. Path already ends with slash
+    # 2. Path has dot (static files like .css, .js)
+    # 3. Method is not GET (POST, PUT, DELETE should not be redirected)
+    if not path.endswith('/') and '.' not in path.split('/')[-1] and request.method == "GET":
         new_url = str(request.url) + '/'
+        logger.info(f"Redirecting GET {path} to {new_url}")
         response = JSONResponse(
             status_code=307,  # Temporary redirect
             content={"message": f"Redirecting to {new_url}"},
             headers={"Location": new_url}
         )
         return response
+    
     return await call_next(request)
+
+
+# ==================== API ROUTE ALIASES (For frontend compatibility) ====================
+# Some frontend calls may not have trailing slash - add aliases for common routes
+
+@app.get("/api/products")
+def products_redirect():
+    """Redirect /api/products to /api/products/"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/products/", status_code=307)
+
+@app.get("/api/equipment")
+def equipment_redirect():
+    """Redirect /api/equipment to /api/equipment/"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/equipment/", status_code=307)
+
+@app.get("/api/cleaning-process")
+def cleaning_process_redirect():
+    """Redirect /api/cleaning-process to /api/cleaning-process/"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/cleaning-process/", status_code=307)
+
+@app.get("/api/validation/history")
+def validation_history_redirect():
+    """Redirect /api/validation/history to /api/validation/history/"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/validation/history/", status_code=307)
+
 
 # ==================== EXCEPTION HANDLERS ====================
 @app.exception_handler(HTTPException)
@@ -167,6 +204,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
+
 # ==================== AUTO DATABASE SETUP FUNCTION ====================
 def setup_database_on_startup():
     try:
@@ -192,6 +230,7 @@ def setup_database_on_startup():
                 db.commit()
                 logger.info("✅ Admin user created: admin / Admin@123")
                 
+                # Create cleaning levels
                 try:
                     from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
                     existing_levels = db.query(CleaningLevel).count()
@@ -246,6 +285,7 @@ def setup_database_on_startup():
         import traceback
         traceback.print_exc()
 
+
 # ==================== LIFESPAN EVENTS ====================
 @app.on_event("startup")
 async def startup_event():
@@ -271,9 +311,11 @@ async def startup_event():
         import traceback
         traceback.print_exc()
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("🛑 Shutting down Cleaning Validation API...")
+
 
 # ==================== HEALTH & ROOT ENDPOINTS ====================
 @app.get("/health")
@@ -296,6 +338,7 @@ def health_check(db: Session = Depends(get_db)):
         "environment": config.ENVIRONMENT
     }
 
+
 @app.get("/")
 def root():
     return {
@@ -316,6 +359,7 @@ def root():
         ]
     }
 
+
 # ==================== ROUTERS ====================
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(products.router, prefix="/api/products", tags=["Products"])
@@ -331,6 +375,7 @@ app.include_router(guidance.router, prefix="/api/guidance", tags=["APIC Guidance
 app.include_router(cleaning_process.router, prefix="/api/cleaning-process", tags=["Cleaning Process Control"])
 app.include_router(training.router, prefix="/api/training", tags=["Training"])
 app.include_router(formulation.router, prefix="/api/formulation", tags=["Formulation Plants"])
+
 
 # ==================== API INFO ENDPOINT ====================
 @app.get("/api/info")
