@@ -13,7 +13,7 @@ from .equipment_filter import EquipmentFilterService
 from .extra_area import ExtraAreaService
 from .amv_warning import AMVWarningService
 from .audit import AuditService
-from .report import ReportService
+from .report import ReportService  # ✅ ADDED THIS MISSING IMPORT
 from .auth import AuthService
 
 # APIC Guideline Services
@@ -47,7 +47,7 @@ __all__ = [
     "ExtraAreaService",
     "AMVWarningService",
     "AuditService",
-    "ReportService",
+    "ReportService",      # ✅ Now properly imported
     "AuthService",
     "CleaningLevelService",
     "HoldTimeService",
@@ -61,5 +61,5 @@ __all__ = [
     "GuidanceService",
     "CleaningProcessService",
     "CleaningCapabilityService",
-    "FormulationService",  # NEW
+    "FormulationService",
 ]
