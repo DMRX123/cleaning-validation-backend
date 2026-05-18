@@ -27,6 +27,7 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 def get_db():
     """Dependency function with retry logic for database session"""
     max_retries = 3
@@ -35,7 +36,6 @@ def get_db():
     for attempt in range(max_retries):
         db = SessionLocal()
         try:
-            # Test connection
             db.execute(text("SELECT 1"))
             yield db
             break
@@ -50,6 +50,7 @@ def get_db():
         finally:
             db.close()
 
+
 def init_db():
     try:
         with engine.connect() as conn:
@@ -62,8 +63,10 @@ def init_db():
         logger.error(f"Failed to initialize database: {str(e)}")
         raise
 
+
 def get_engine():
     return engine
+
 
 def check_db_connection():
     try:

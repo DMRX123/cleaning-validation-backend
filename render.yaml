@@ -5,10 +5,10 @@ services:
     repo: https://github.com/DMRX123/cleaning-validation-backend
     branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port \
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        value: postgresql://postgres.rjmaczgskjvqcrvkdumr:YOUR_SUPABASE_PASSWORD@aws-0.ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require
+        value: postgresql://cleaning_validation_db_user:Rvy2FS9PK54pacbayVMSTB8CXlDfXrb8@dpg-d81eh5dckfvc738c379g-a.oregon-postgres.render.com/cleaning_validation_db?sslmode=require
       - key: SECRET_KEY
         generateValue: true
       - key: ALGORITHM
@@ -21,3 +21,5 @@ services:
         value: false
       - key: LOG_LEVEL
         value: INFO
+      - key: ALLOW_ALL_ORIGINS
+        value: true

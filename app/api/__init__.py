@@ -1,6 +1,5 @@
 """
 API Routes for Cleaning Validation System
-All endpoints are organized by functionality
 """
 
 from . import auth
@@ -16,7 +15,7 @@ from . import protocols
 from . import guidance
 from . import cleaning_process
 from . import training
-from . import formulation  # NEW: Formulation plants API
+from . import formulation
 
 __all__ = [
     "auth",
@@ -32,5 +31,5 @@ __all__ = [
     "guidance",
     "cleaning_process",
     "training",
-    "formulation",  # NEW
+    "formulation",
 ]

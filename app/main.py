@@ -16,7 +16,7 @@ from .api import (
 from .database import init_db, get_db
 from .config import config
 
-# Setup logging - FIXED: single configuration
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -33,13 +33,12 @@ app = FastAPI(
 )
 
 # ==================== CORS MIDDLEWARE ====================
-CORS_ALLOW_ORIGINS = ["*"]  # Allow all for production
+CORS_ALLOW_ORIGINS = ["*"]
 CORS_MODE = "allow_all"
 
 logger.info("=" * 60)
 logger.info("🌐 CORS FINAL CONFIGURATION")
 logger.info(f"   Mode: {CORS_MODE}")
-logger.info(f"   Origins: {CORS_ALLOW_ORIGINS}")
 logger.info("=" * 60)
 
 app.add_middleware(
@@ -64,8 +63,6 @@ except ImportError as e:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = datetime.now()
-    
-    # Add CORS headers to every response
     response = await call_next(request)
     process_time = (datetime.now() - start_time).total_seconds()
     
@@ -82,56 +79,42 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# ==================== FIXED: HEALTH ENDPOINT (GET method) ====================
+# ==================== HEALTH ENDPOINT ====================
 @app.get("/health")
-async def health_check(db: Session = Depends(get_db)):
-    """Health check endpoint - GET method"""
-    db_status = "healthy"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
-        logger.warning(f"Database health check failed: {str(e)}")
-    
+async def health_check():
     return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
+        "status": "healthy",
         "version": config.API_VERSION,
-        "database": db_status,
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
         "cors_mode": CORS_MODE,
-        "rate_limiting_enabled": True,
         "environment": config.ENVIRONMENT
     }
 
-# ==================== FIXED: COMPREHENSIVE TRAILING SLASH HANDLER ====================
+# ==================== TRAILING SLASH HANDLER ====================
 @app.middleware("http")
 async def fix_trailing_slash(request: Request, call_next):
-    """Fix 405 errors by redirecting /api/xxx to /api/xxx/ for GET requests"""
     path = request.url.path
     
-    # Skip if path already ends with slash, has dot (static files), or not GET
     if path.endswith('/') or '.' in path.split('/')[-1] or request.method != "GET":
         return await call_next(request)
     
-    # List of API paths that need trailing slash
     api_paths = [
         "/api/products", "/api/equipment", "/api/static/plants", 
         "/api/static/solubility", "/api/static/difficulty", "/api/static/equipment-types",
         "/api/training/modules", "/api/training/records",
-        "/api/cleaning-process", "/api/cleaning-validation/microbiological-limits",
-        "/api/formulation/dosage-forms", "/api/dashboard/stats", "/api/dashboard/recent-activity",
-        "/api/validation/history", "/api/guidance/guidance/questions"
+        "/api/cleaning-process", "/api/formulation/dosage-forms", 
+        "/api/dashboard/stats", "/api/dashboard/recent-activity",
+        "/api/validation/history"
     ]
     
-    if path in api_paths or path.startswith("/api/") and len(path.split('/')) >= 3:
+    if path in api_paths or (path.startswith("/api/") and len(path.split('/')) >= 3):
         new_url = str(request.url) + '/'
-        logger.info(f"Redirecting GET {path} to {new_url}")
         return RedirectResponse(url=new_url, status_code=307)
     
     return await call_next(request)
 
-# ==================== API ROUTE ALIASES (Direct redirects) ====================
+# ==================== API ROUTE ALIASES ====================
 @app.get("/api/products")
 async def products_redirect():
     return RedirectResponse(url="/api/products/", status_code=307)
@@ -176,14 +159,9 @@ async def dosage_forms_redirect():
 async def dashboard_stats_redirect():
     return RedirectResponse(url="/api/dashboard/stats/", status_code=307)
 
-@app.get("/api/guidance/guidance/questions")
-async def guidance_questions_redirect():
-    return RedirectResponse(url="/api/guidance/guidance/questions/", status_code=307)
-
-# ==================== OPTIONS HANDLER FOR CORS PREFLIGHT ====================
+# ==================== OPTIONS HANDLER ====================
 @app.options("/{path:path}")
 async def options_handler(path: str):
-    """Handle CORS preflight requests"""
     return JSONResponse(
         status_code=200,
         content={"message": "OK"},
@@ -236,7 +214,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         headers={"Access-Control-Allow-Origin": "*"}
     )
 
-# ==================== DATABASE SETUP FUNCTION ====================
+# ==================== DATABASE SETUP ====================
 def setup_database_on_startup():
     try:
         from app.database import SessionLocal
@@ -261,7 +239,6 @@ def setup_database_on_startup():
                 db.commit()
                 logger.info("✅ Admin user created: admin / Admin@123")
                 
-                # Create cleaning levels
                 try:
                     from app.models.cleaning_level import CleaningLevel, CleaningLevelEnum
                     existing_levels = db.query(CleaningLevel).count()
@@ -290,7 +267,6 @@ def setup_database_on_startup():
                 except Exception as e:
                     logger.warning(f"⚠️ Could not create cleaning levels: {e}")
                 
-                # Run direct SQL to add missing columns if needed
                 try:
                     db.execute(text("""
                         ALTER TABLE products ADD COLUMN IF NOT EXISTS product_code VARCHAR;
@@ -302,10 +278,8 @@ def setup_database_on_startup():
                     logger.info("✅ Product columns verified/created")
                 except Exception as e:
                     logger.warning(f"⚠️ Could not verify product columns: {e}")
-                    
             else:
                 logger.info(f"✅ Database already has {user_count} users.")
-                
         except Exception as e:
             logger.warning(f"⚠️ Setup check warning: {e}")
         finally:
@@ -319,7 +293,6 @@ async def startup_event():
     logger.info("=" * 60)
     logger.info("🚀 Starting up Cleaning Validation API...")
     logger.info(f"   Environment: {config.ENVIRONMENT}")
-    logger.info(f"   Debug mode: {config.DEBUG}")
     logger.info(f"   API Version: {config.API_VERSION}")
     logger.info(f"   CORS Mode: {CORS_MODE}")
     try:
@@ -329,8 +302,6 @@ async def startup_event():
         logger.info("=" * 60)
         logger.info("🎉 Cleaning Validation API is READY!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
-        logger.info("🌐 CORS: Enabled for all origins")
-        logger.info("🔒 Rate Limiting: 100 requests/minute")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
@@ -347,8 +318,7 @@ def root():
         "status": "healthy",
         "version": config.API_VERSION,
         "documentation": "/docs",
-        "apic_compliance": "100%",
-        "guideline_version": "APIC Cleaning Validation Guide 2021"
+        "apic_compliance": "100%"
     }
 
 # ==================== ROUTERS ====================
