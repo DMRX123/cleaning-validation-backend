@@ -16,7 +16,14 @@ class Config:
     if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     
-    # For local development, force SQLite if using remote PostgreSQL
+    # Fix for Render PostgreSQL - ensure sslmode is correct
+    if DATABASE_URL and "render.com" in DATABASE_URL:
+        if "sslmode=require" not in DATABASE_URL and "?" not in DATABASE_URL:
+            DATABASE_URL += "?sslmode=require"
+        elif "sslmode=require" not in DATABASE_URL:
+            DATABASE_URL += "&sslmode=require"
+    
+    # For local development with remote PostgreSQL (disable this check for production)
     if DATABASE_URL and "postgresql" in DATABASE_URL and "localhost" not in DATABASE_URL:
         if os.getenv("ENVIRONMENT", "development") == "development":
             logger.warning("⚠️ Switching from remote PostgreSQL to local SQLite for development")
@@ -41,7 +48,7 @@ class Config:
     logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper(), logging.INFO))
     
     # API CONFIGURATION
-    API_VERSION = os.getenv("API_VERSION", "2.0.0")
+    API_VERSION = os.getenv("API_VERSION", "3.0.0")
     API_TITLE = os.getenv("API_TITLE", "Cleaning Validation API")
     API_DESCRIPTION = os.getenv("API_DESCRIPTION", "APIC Guideline Compliant Cleaning Validation System")
     
@@ -53,7 +60,8 @@ class Config:
     def get_cors_origins(cls) -> list:
         if cls.ALLOW_ALL_ORIGINS:
             return ["*"]
-        return ["*"]
+        cors_origins = os.getenv("CORS_ORIGINS", "")
+        return [origin.strip() for origin in cors_origins.split(",") if origin.strip()] or ["*"]
     
     @classmethod
     def is_development(cls) -> bool:

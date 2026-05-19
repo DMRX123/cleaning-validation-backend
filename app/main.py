@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import logging
 import os
+import hashlib
 
 from .api import (
     auth, products, equipment, calculations, validation, 
@@ -67,7 +68,8 @@ async def health_check():
         "version": "3.0.0",
         "timestamp": datetime.now().isoformat(),
         "cors_enabled": True,
-        "security": "DISABLED"
+        "security": "DISABLED",
+        "database_connected": check_db_connection()
     }
 
 @app.get("/")
@@ -116,9 +118,36 @@ async def startup_event():
     logger.info(f"   Environment: {config.ENVIRONMENT}")
     logger.info(f"   Version: 3.0.0")
     logger.info(f"   Security: DISABLED")
+    logger.info(f"   Database URL: {config.DATABASE_URL[:50]}...")
+    
     try:
         init_db()
         logger.info("✅ Database tables ready")
+        
+        # Create admin user if not exists
+        from .models.user import User
+        db = next(get_db())
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            if not admin:
+                hashed = hashlib.sha256("admin".encode()).hexdigest()
+                admin = User(
+                    username="admin",
+                    email="admin@cleaning-validation.com",
+                    hashed_password=hashed,
+                    is_active=True,
+                    is_admin=True
+                )
+                db.add(admin)
+                db.commit()
+                logger.info("✅ Admin user created")
+            else:
+                logger.info("✅ Admin user already exists")
+        except Exception as e:
+            logger.warning(f"Admin user check failed: {str(e)}")
+        finally:
+            db.close()
+            
         logger.info("=" * 60)
         logger.info("🎉 Cleaning Validation API is READY!")
         logger.info("📋 APIC Guideline 2021 Compliance: 100%")
@@ -126,10 +155,14 @@ async def startup_event():
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {str(e)}")
+        logger.error("⚠️ API will continue but database operations may fail")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("🛑 Shutting down Cleaning Validation API...")
+
+# Import check_db_connection from database
+from .database import check_db_connection
 
 # ==================== ROUTERS - ALL PUBLIC, NO AUTH ====================
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
