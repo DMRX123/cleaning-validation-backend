@@ -1,3 +1,5 @@
+# app/schemas/product.py - COMPLETE
+
 from pydantic import BaseModel
 from typing import Optional
 
@@ -21,11 +23,14 @@ class ProductBase(BaseModel):
     potency_class: int = 3
     cleanability_rating: int = 2
 
+
 class ProductCreate(ProductBase):
     pass
 
+
 class ProductUpdate(ProductBase):
     pass
+
 
 class ProductResponse(ProductBase):
     id: int

@@ -10,16 +10,16 @@ services:
       - key: DATABASE_URL
         value: postgresql://cleaning_validation_db_user:Rvy2FS9PK54pacbayVMSTB8CXlDfXrb8@dpg-d81eh5dckfvc738c379g-a.oregon-postgres.render.com/cleaning_validation_db?sslmode=require
       - key: SECRET_KEY
-        generateValue: true
+        value: "aQJMCZkA92ivP7uYGwgztoFxLEDfRbjs"
       - key: ALGORITHM
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 30
+        value: "30"
       - key: ENVIRONMENT
         value: production
       - key: DEBUG
-        value: false
+        value: "false"
       - key: LOG_LEVEL
         value: INFO
       - key: ALLOW_ALL_ORIGINS
-        value: true
+        value: "true"

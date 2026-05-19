@@ -8,22 +8,29 @@ from ..services.maco import MACOService
 from ..services.swab import SwabService
 from ..services.rinse import RinseService
 from ..services.worst_case_service import WorstCaseService
-from ..services.equipment_filter import EquipmentFilterService
-from .auth import get_current_user
-from ..models.user import User
 from pydantic import BaseModel
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+# ============================================
+# REQUEST SCHEMAS
+# ============================================
+
 class MACORequest(BaseModel):
     previous_product_id: int
     next_product_id: int
+    ld50_mg_per_kg: Optional[float] = None  # NEW: For LD50 method
+    ttc_category: Optional[str] = "standard"  # NEW: For TTC method (carcinogenic/potent/standard)
+
 
 class SwabLimitRequest(BaseModel):
     session_id: int
     total_surface_area: float
+
 
 class RinseLimitRequest(BaseModel):
     session_id: int
@@ -32,13 +39,13 @@ class RinseLimitRequest(BaseModel):
     total_surface_area: float
 
 
+# ============================================
+# MACO CALCULATION ENDPOINT
+# ============================================
+
 @router.post("/maco")
-def calculate_maco(
-    request: MACORequest, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Calculate MACO (Maximum Allowable Carry Over) between two products"""
+def calculate_maco(request: MACORequest, db: Session = Depends(get_db)):
+    """Calculate MACO between two products - PUBLIC"""
     try:
         previous = db.query(Product).filter(Product.id == request.previous_product_id).first()
         next_product = db.query(Product).filter(Product.id == request.next_product_id).first()
@@ -48,15 +55,29 @@ def calculate_maco(
         if not next_product:
             raise HTTPException(status_code=404, detail=f"Next product with ID {request.next_product_id} not found")
         
-        result = MACOService.calculate_all(previous, next_product)
+        # Pass db session to get dosage form based safety factors
+        result = MACOService.calculate_all(
+            previous, 
+            next_product,
+            ld50_mg_per_kg=request.ld50_mg_per_kg,
+            ttc_category=request.ttc_category,
+            db=db  # NEW: Pass db for dosage form lookup
+        )
         
         return {
+            "success": True,
             "method_10ppm": float(result.get("method_10ppm", 0)),
+            "method_100ppm": float(result.get("method_100ppm", 0)),
             "method_tdd": float(result.get("method_tdd", 0)),
             "method_ade_pde": float(result.get("method_ade_pde", 0)),
+            "method_ld50": float(result.get("method_ld50", 0)),
             "method_ttc": float(result.get("method_ttc", 0)),
             "lowest_maco": float(result.get("lowest_maco", 0)),
-            "selected_method": result.get("selected_method", "N/A")
+            "selected_method": result.get("selected_method", "N/A"),
+            "safety_factor_used": result.get("safety_factor_used", 1000),
+            "safety_factor_dosage_form": result.get("safety_factor_dosage_form", "Oral"),
+            "safety_factor_justification": result.get("safety_factor_justification", ""),
+            "reference": "APIC Cleaning Validation Guide 2021 Section 4.2"
         }
     except HTTPException:
         raise
@@ -65,13 +86,18 @@ def calculate_maco(
         raise HTTPException(status_code=500, detail=f"MACO calculation failed: {str(e)}")
 
 
+# ============================================
+# SWAB LIMIT CALCULATION ENDPOINT
+# ============================================
+
 @router.post("/swab-limit")
-def calculate_swab_limit(
-    request: SwabLimitRequest, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Calculate swab limit for validation session"""
+def calculate_swab_limit(request: SwabLimitRequest, db: Session = Depends(get_db)):
+    """
+    Calculate swab limit - PUBLIC
+    
+    Formula: (MACO × Swab Area) / (Total Area × Recovery)
+    Reference: APIC 2021 Section 4.2.4
+    """
     try:
         session = db.query(ValidationSession).filter(ValidationSession.id == request.session_id).first()
         if not session:
@@ -95,6 +121,7 @@ def calculate_swab_limit(
         if request.total_surface_area <= 0:
             raise HTTPException(status_code=400, detail="Total surface area must be greater than 0")
         
+        # Calculate swab limits
         mg_per_swab = SwabService.calculate_mg_per_swab(
             maco_mg=maco_mg,
             swab_surface_area=product.swab_surface_area,
@@ -111,13 +138,15 @@ def calculate_swab_limit(
         )
         
         return {
+            "success": True,
             "mg_per_swab": float(mg_per_swab) if mg_per_swab is not None else 0.0,
             "ppm": float(ppm) if ppm is not None else 0.0,
             "maco_mg_used": float(maco_mg),
             "surface_area_used": request.total_surface_area,
-            "recovery_used": product.swab_recovery
+            "recovery_used": product.swab_recovery,
+            "formula": "Swab Limit = (MACO × Swab Area) / (Total Area × Recovery)",
+            "reference": "APIC Cleaning Validation Guide 2021 Section 4.2.4"
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -125,13 +154,18 @@ def calculate_swab_limit(
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 
+# ============================================
+# RINSE LIMIT CALCULATION ENDPOINT
+# ============================================
+
 @router.post("/rinse-limit")
-def calculate_rinse_limit(
-    request: RinseLimitRequest, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Calculate rinse limit for equipment"""
+def calculate_rinse_limit(request: RinseLimitRequest, db: Session = Depends(get_db)):
+    """
+    Calculate rinse limit - PUBLIC
+    
+    Formula: Rinse Limit = (MACO × Equipment Area) / Total Area
+    Reference: APIC 2021 Section 4.2.5
+    """
     try:
         session = db.query(ValidationSession).filter(ValidationSession.id == request.session_id).first()
         if not session:
@@ -147,7 +181,7 @@ def calculate_rinse_limit(
         if not previous_product or not next_product:
             raise HTTPException(status_code=404, detail="Products not found in session")
         
-        # Get MACO
+        # Get MACO value
         if session.lowest_maco and session.lowest_maco > 0:
             maco_mg = float(session.lowest_maco)
         else:
@@ -161,7 +195,7 @@ def calculate_rinse_limit(
         if total_surface_area <= 0:
             raise HTTPException(status_code=400, detail="Total surface area must be greater than 0")
         
-        # Calculate rinse limit
+        # Calculate rinse limits
         limit_mg = RinseService.calculate_rinse_limit(
             maco_mg=maco_mg,
             equipment_surface_area=equipment_surface_area,
@@ -190,7 +224,8 @@ def calculate_rinse_limit(
             equipment_surface_area_m2=equipment_surface_area
         )
         
-        response_data = {
+        return {
+            "success": True,
             "limit_mg": float(limit_mg),
             "limit_ppm": float(limit_ppm),
             "volume_loq": float(volume_loq),
@@ -199,12 +234,10 @@ def calculate_rinse_limit(
             "maco_mg": float(maco_mg),
             "equipment_surface_area": equipment_surface_area,
             "rinse_volume_used": rinse_volume,
-            "loq_used": loq
+            "loq_used": loq,
+            "formula": "Rinse Limit = (MACO × Equipment Area) / Total Area",
+            "reference": "APIC Cleaning Validation Guide 2021 Section 4.2.5"
         }
-        
-        logger.info(f"Rinse limit calculated: {response_data}")
-        return response_data
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -212,13 +245,23 @@ def calculate_rinse_limit(
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 
+# ============================================
+# WORST CASE CALCULATION ENDPOINT
+# ============================================
+
 @router.post("/worst-case")
-def find_worst_case(
-    plant: str = None, 
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Find worst case product for a plant"""
+def find_worst_case(plant: str = None, db: Session = Depends(get_db)):
+    """
+    Find worst case product for a plant - PUBLIC
+    
+    Rating criteria (as per APIC 2021 Section 7.4):
+    - Hardest to clean (1-3)
+    - Solubility (1-3)
+    - Toxicity/ADE (1-5)
+    - Potency/Min Dose (1-5)
+    
+    Total Rating = Difficulty × Solubility × Toxicity × Potency
+    """
     try:
         query = db.query(Product)
         if plant:
@@ -227,13 +270,14 @@ def find_worst_case(
         products = query.all()
         
         if not products:
-            return {"message": "No products found"}
+            return {"success": True, "message": "No products found", "worst_case": None}
         
         worst_case = WorstCaseService.select_worst_case(products)
         
         if worst_case:
             rating = WorstCaseService.calculate_product_rating(worst_case)
             return {
+                "success": True,
                 "id": worst_case.id,
                 "name": worst_case.name,
                 "product_code": worst_case.product_code,
@@ -242,10 +286,17 @@ def find_worst_case(
                 "ade_pde": worst_case.ade_pde,
                 "min_dose": worst_case.min_dose,
                 "total_rating": rating.get("total_rating", 0),
-                "plant": worst_case.plant
+                "plant": worst_case.plant,
+                "rating_details": {
+                    "difficulty_rating": rating.get("difficulty_rating", 0),
+                    "solubility_rating": rating.get("solubility_rating", 0),
+                    "toxicity_rating": rating.get("toxicity_rating", 0),
+                    "potency_rating": rating.get("potency_rating", 0),
+                    "worst_case_rank": rating.get("worst_case_rank", "LOW")
+                },
+                "reference": "APIC Cleaning Validation Guide 2021 Section 7.4"
             }
-        return {"message": "Could not determine worst case product"}
-        
+        return {"success": True, "message": "Could not determine worst case product", "worst_case": None}
     except Exception as e:
         logger.error(f"Worst case calculation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

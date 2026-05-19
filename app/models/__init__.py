@@ -49,13 +49,22 @@ from .cleaning_process import (
     CleaningTypeEnum
 )
 
-# NEW: Formulation Plant Models
+# Formulation Plant Models
 from .dosage_form import DosageForm, DosageFormEnum, PlantTypeEnum, ProductDosageForm
 from .sampling_methods import SamplingLocation, SamplingResult, SamplingMethodEnum
 from .formulation_equipment import FormulationEquipment, EquipmentCategoryEnum
 
+# Protocol Generator Models
+from .recovery_study import RecoveryStudy
+from .fmea_risk import FMEARiskAssessment
+from .nitrosamine import NitrosamineRiskAssessment
+from .operator_qualification import OperatorQualification
+from .protocol_template import ProtocolTemplate, CleaningValidationProtocol
+
+# Report Generator Models (NEW)
+from .validation_report import ValidationReport
+
 __all__ = [
-    # Core Models
     "Product",
     "Equipment",
     "ValidationSession",
@@ -65,50 +74,28 @@ __all__ = [
     "RinseResult",
     "AuditLog",
     "User",
-    
-    # Section 5.0 - Levels of Cleaning
     "CleaningLevel",
     "CleaningLevelEnum",
     "CleaningLevelAssignment",
-    
-    # Section 9.7 - Hold Times
     "DirtyHoldTime",
     "CleanHoldTime",
     "HoldTimeValidation",
-    
-    # Section 8.1 - Microbiological
     "MicrobiologicalLimit",
     "MicrobiologicalResult",
-    
-    # Section 7.0 - Bracketing & Worst Case
     "BracketingGroup",
     "BracketingProduct",
     "BracketingWorstCase",
-    
-    # Section 9.0 - Validation Protocol
     "ValidationProtocol",
     "ProtocolExecutionResult",
-    
-    # Section 10.0 - Change Control
     "ChangeControl",
-    
-    # Section 10.0 - Training
     "TrainingModule",
     "TrainingRecord",
-    
-    # Section 4.2.1.1 - ADE Calculation
     "ADECalculation",
-    
-    # Section 4.2.4 - Swab Area Segmentation
     "SwabSamplingArea",
-    
-    # Section 6.0 - Cleaning Process Control
     "CleaningProcess",
     "CleaningParameter",
     "CleaningExecution",
     "CleaningTypeEnum",
-    
-    # NEW: Formulation Plant Models
     "DosageForm",
     "DosageFormEnum",
     "PlantTypeEnum",
@@ -118,4 +105,11 @@ __all__ = [
     "SamplingMethodEnum",
     "FormulationEquipment",
     "EquipmentCategoryEnum",
+    "RecoveryStudy",
+    "FMEARiskAssessment",
+    "NitrosamineRiskAssessment",
+    "OperatorQualification",
+    "ProtocolTemplate",
+    "CleaningValidationProtocol",
+    "ValidationReport",  # NEW
 ]

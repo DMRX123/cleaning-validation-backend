@@ -14,7 +14,7 @@ class Product(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
-    product_code = Column(String, nullable=True)  # N, S3A, RI1A, HS10B
+    product_code = Column(String, nullable=True)
     min_batch_size = Column(Float, nullable=False)
     max_batch_size = Column(Float, nullable=False)
     ade_pde = Column(Float, nullable=False)

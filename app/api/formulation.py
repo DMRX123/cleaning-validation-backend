@@ -1,132 +1,155 @@
-# app/api/formulation.py - COMPLETE FIXED VERSION
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import Optional
+from pydantic import BaseModel
 from datetime import datetime
 import logging
 
 from ..database import get_db
-from .auth import get_current_user
-from ..models.user import User
-from ..models.product import Product
-from ..models.equipment import Equipment
-from ..models.session import ValidationSession
 from ..models.dosage_form import DosageForm, DosageFormEnum, PlantTypeEnum, ProductDosageForm
 from ..models.sampling_methods import SamplingLocation, SamplingMethodEnum, SamplingResult
 from ..models.formulation_equipment import FormulationEquipment, EquipmentCategoryEnum
+from ..models.product import Product
+from ..models.equipment import Equipment
+from ..models.session import ValidationSession
 from ..services.formulation_service import FormulationService
 
 logger = logging.getLogger(__name__)
 
-# FIXED: Removed prefix from here - will be added in main.py
 router = APIRouter(tags=["Formulation Plants"])
 
-# ==================== SCHEMAS ====================
+
+# ============================================
+# SCHEMAS
+# ============================================
 
 class DosageFormCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    code: DosageFormEnum
-    plant_type: PlantTypeEnum
-    requires_sterility: bool = False
-    requires_endotoxin_testing: bool = False
-    requires_particle_count: bool = False
-    default_microbial_limit_cfu: Optional[float] = Field(None, ge=0)
-    default_endotoxin_limit_eu_ml: Optional[float] = Field(None, ge=0)
-    description: Optional[str] = None
-
-class DosageFormResponse(BaseModel):
-    id: int
     name: str
     code: str
     plant_type: str
-    requires_sterility: bool
-    requires_endotoxin_testing: bool
-    default_microbial_limit_cfu: Optional[float]
-    default_endotoxin_limit_eu_ml: Optional[float]
-    
-    class Config:
-        from_attributes = True
+    requires_sterility: bool = False
+    requires_endotoxin_testing: bool = False
+    requires_particle_count: bool = False
+    default_microbial_limit_cfu: Optional[float] = None
+    default_endotoxin_limit_eu_ml: Optional[float] = None
+    description: Optional[str] = None
+
+
+class DosageFormUpdate(BaseModel):
+    name: Optional[str] = None
+    requires_sterility: Optional[bool] = None
+    requires_endotoxin_testing: Optional[bool] = None
+    default_microbial_limit_cfu: Optional[float] = None
+    default_endotoxin_limit_eu_ml: Optional[float] = None
+    is_active: Optional[bool] = None
+
 
 class ProductDosageFormCreate(BaseModel):
-    product_id: int = Field(..., gt=0)
-    dosage_form_id: int = Field(..., gt=0)
-    batch_quantity: Optional[float] = Field(None, gt=0)
+    product_id: int
+    dosage_form_id: int
+    batch_quantity: Optional[float] = None
     batch_unit: str = "kg"
-    min_daily_dose: Optional[float] = Field(None, ge=0)
-    max_daily_dose: Optional[float] = Field(None, ge=0)
+    min_daily_dose: Optional[float] = None
+    max_daily_dose: Optional[float] = None
     dose_unit: str = "mg"
 
+
 class SamplingLocationCreate(BaseModel):
-    equipment_id: int = Field(..., gt=0)
-    location_name: str = Field(..., min_length=1, max_length=200)
+    equipment_id: int
+    location_name: str
     location_description: Optional[str] = None
-    surface_area_cm2: Optional[float] = Field(None, ge=0)
+    surface_area_cm2: Optional[float] = None
     is_hard_to_clean: bool = False
     is_worst_case: bool = False
-    priority: int = Field(3, ge=1, le=5)
-    recommended_method: SamplingMethodEnum = SamplingMethodEnum.SWAB
-    recovery_factor_percent: float = Field(100.0, ge=0, le=200)
+    priority: int = 3
+    recommended_method: str = "swab"
+    recovery_factor_percent: float = 100.0
+
+
+class SamplingLocationUpdate(BaseModel):
+    location_name: Optional[str] = None
+    location_description: Optional[str] = None
+    is_hard_to_clean: Optional[bool] = None
+    is_worst_case: Optional[bool] = None
+    priority: Optional[int] = None
+    recovery_factor_percent: Optional[float] = None
+    is_active: Optional[bool] = None
+
 
 class SamplingResultCreate(BaseModel):
-    session_id: int = Field(..., gt=0)
-    location_id: Optional[int] = Field(None, gt=0)
-    sampling_method: SamplingMethodEnum
-    sample_code: str = Field(..., min_length=1, max_length=50)
+    session_id: int
+    location_id: Optional[int] = None
+    sampling_method: str
+    sample_code: str
     sampling_date: datetime
-    sampled_by: str = Field(..., min_length=1)
-    swab_area_cm2: Optional[float] = Field(None, ge=0)
-    rinse_volume_ml: Optional[float] = Field(None, ge=0)
-    contact_plate_size_cm2: Optional[float] = Field(None, ge=0)
-    dilution_factor: float = Field(1.0, ge=0)
-    absorbance_sample: Optional[float] = Field(None, ge=0)
-    absorbance_std: Optional[float] = Field(None, gt=0)
-    total_germ_count: Optional[float] = Field(None, ge=0)
-    yeast_mold_count: Optional[float] = Field(None, ge=0)
-    endotoxin_value: Optional[float] = Field(None, ge=0)
+    sampled_by: str
+    swab_area_cm2: Optional[float] = None
+    rinse_volume_ml: Optional[float] = None
+    contact_plate_size_cm2: Optional[float] = None
+    dilution_factor: float = 1.0
+    absorbance_sample: Optional[float] = None
+    absorbance_std: Optional[float] = None
+    total_germ_count: Optional[float] = None
+    yeast_mold_count: Optional[float] = None
+    endotoxin_value: Optional[float] = None
     deviations: Optional[str] = None
 
+
 class FormulationEquipmentCreate(BaseModel):
-    equipment_id: int = Field(..., gt=0)
-    category: EquipmentCategoryEnum
+    equipment_id: int
+    category: str
     contact_parts: Optional[str] = None
     has_cip: bool = False
     has_sip: bool = False
-    sampling_points_count: int = Field(0, ge=0)
+    sampling_points_count: int = 0
     worst_case_sampling_points: Optional[str] = None
 
-# ==================== DOSAGE FORM ENDPOINTS ====================
 
-@router.get("/dosage-forms", response_model=List[DosageFormResponse])
-def get_all_dosage_forms(
-    plant_type: Optional[PlantTypeEnum] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all dosage forms, optionally filtered by plant type"""
+class FormulationEquipmentUpdate(BaseModel):
+    category: Optional[str] = None
+    has_cip: Optional[bool] = None
+    has_sip: Optional[bool] = None
+    sampling_points_count: Optional[int] = None
+    is_validated_for_cleaning: Optional[bool] = None
+
+
+# ============================================
+# DOSAGE FORMS CRUD - PUBLIC
+# ============================================
+
+@router.get("/dosage-forms")
+def get_all_dosage_forms(plant_type: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get all dosage forms - PUBLIC"""
     try:
-        query = db.query(DosageForm)
+        query = db.query(DosageForm).filter(DosageForm.is_active == True)
         if plant_type:
             query = query.filter(DosageForm.plant_type == plant_type)
-        return query.all()
+        forms = query.all()
+        return {"success": True, "count": len(forms), "data": forms}
     except Exception as e:
         logger.error(f"Error getting dosage forms: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/dosage-forms/{dosage_form_id}", response_model=DosageFormResponse)
-def get_dosage_form(
-    dosage_form_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get dosage form by ID"""
+@router.get("/dosage-forms/all")
+def get_all_dosage_forms_including_inactive(db: Session = Depends(get_db)):
+    """Get ALL dosage forms (including inactive) - PUBLIC"""
+    try:
+        forms = db.query(DosageForm).all()
+        return {"success": True, "count": len(forms), "data": forms}
+    except Exception as e:
+        logger.error(f"Error getting all dosage forms: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/dosage-forms/{dosage_form_id}")
+def get_dosage_form(dosage_form_id: int, db: Session = Depends(get_db)):
+    """Get dosage form by ID - PUBLIC"""
     try:
         dosage_form = db.query(DosageForm).filter(DosageForm.id == dosage_form_id).first()
         if not dosage_form:
             raise HTTPException(404, "Dosage form not found")
-        return dosage_form
+        return {"success": True, "data": dosage_form}
     except HTTPException:
         raise
     except Exception as e:
@@ -134,26 +157,20 @@ def get_dosage_form(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/dosage-forms", response_model=DosageFormResponse)
-def create_dosage_form(
-    data: DosageFormCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Create new dosage form (Admin only)"""
+@router.post("/dosage-forms")
+def create_dosage_form(data: DosageFormCreate, db: Session = Depends(get_db)):
+    """Create new dosage form - PUBLIC (Returns existing if duplicate)"""
     try:
-        if not current_user.is_admin:
-            raise HTTPException(403, "Admin access required")
-        
         existing = db.query(DosageForm).filter(DosageForm.code == data.code).first()
         if existing:
-            raise HTTPException(400, "Dosage form with this code already exists")
+            # Return existing instead of error
+            return {"success": True, "message": "Dosage form already exists", "data": existing, "already_exists": True}
         
-        dosage_form = DosageForm(**data.model_dump())
+        dosage_form = DosageForm(**data.dict(), is_active=True)
         db.add(dosage_form)
         db.commit()
         db.refresh(dosage_form)
-        return dosage_form
+        return {"success": True, "message": "Dosage form created", "data": dosage_form, "already_exists": False}
     except HTTPException:
         raise
     except Exception as e:
@@ -162,13 +179,67 @@ def create_dosage_form(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/dosage-forms/{dosage_form_id}")
+def update_dosage_form(dosage_form_id: int, data: DosageFormUpdate, db: Session = Depends(get_db)):
+    """Update dosage form - PUBLIC"""
+    try:
+        dosage_form = db.query(DosageForm).filter(DosageForm.id == dosage_form_id).first()
+        if not dosage_form:
+            raise HTTPException(404, "Dosage form not found")
+        
+        for key, value in data.dict(exclude_unset=True).items():
+            setattr(dosage_form, key, value)
+        
+        db.commit()
+        db.refresh(dosage_form)
+        return {"success": True, "message": "Dosage form updated", "data": dosage_form}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating dosage form: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/dosage-forms/{dosage_form_id}")
+def delete_dosage_form(dosage_form_id: int, db: Session = Depends(get_db)):
+    """Delete dosage form - PUBLIC"""
+    try:
+        dosage_form = db.query(DosageForm).filter(DosageForm.id == dosage_form_id).first()
+        if not dosage_form:
+            raise HTTPException(404, "Dosage form not found")
+        
+        db.delete(dosage_form)
+        db.commit()
+        return {"success": True, "message": "Dosage form deleted", "id": dosage_form_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting dosage form: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/dosage-forms/all")
+def delete_all_dosage_forms(db: Session = Depends(get_db)):
+    """Delete ALL dosage forms - PUBLIC"""
+    try:
+        count = db.query(DosageForm).delete()
+        db.commit()
+        return {"success": True, "message": f"Deleted {count} dosage forms", "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Error deleting all dosage forms: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# PRODUCT DOSAGE FORM LINKS - PUBLIC
+# ============================================
+
 @router.post("/product-dosage-form")
-def link_product_to_dosage_form(
-    data: ProductDosageFormCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Link a product to a dosage form"""
+def link_product_to_dosage_form(data: ProductDosageFormCreate, db: Session = Depends(get_db)):
+    """Link product to dosage form - PUBLIC"""
     try:
         product = db.query(Product).filter(Product.id == data.product_id).first()
         if not product:
@@ -185,7 +256,7 @@ def link_product_to_dosage_form(
         if existing:
             raise HTTPException(400, "Product already linked to this dosage form")
         
-        link = ProductDosageForm(**data.model_dump())
+        link = ProductDosageForm(**data.dict())
         db.add(link)
         db.commit()
         db.refresh(link)
@@ -193,8 +264,6 @@ def link_product_to_dosage_form(
         return {
             "success": True,
             "message": f"Product {product.name} linked to {dosage_form.name}",
-            "product_id": product.id,
-            "dosage_form_id": dosage_form.id,
             "link_id": link.id
         }
     except HTTPException:
@@ -205,51 +274,63 @@ def link_product_to_dosage_form(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/product/{product_id}/dosage-form")
-def get_product_dosage_form(
-    product_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get dosage form information for a product"""
+@router.delete("/product-dosage-form/{link_id}")
+def delete_product_dosage_form_link(link_id: int, db: Session = Depends(get_db)):
+    """Delete product-dosage form link - PUBLIC"""
     try:
-        link = db.query(ProductDosageForm).filter(
-            ProductDosageForm.product_id == product_id
-        ).first()
-        
+        link = db.query(ProductDosageForm).filter(ProductDosageForm.id == link_id).first()
         if not link:
-            return {"message": "Product not linked to any dosage form"}
+            raise HTTPException(404, "Link not found")
+        
+        db.delete(link)
+        db.commit()
+        return {"success": True, "message": "Link deleted", "id": link_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting link: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/product/{product_id}/dosage-form")
+def get_product_dosage_form(product_id: int, db: Session = Depends(get_db)):
+    """Get dosage form for a product - PUBLIC"""
+    try:
+        link = db.query(ProductDosageForm).filter(ProductDosageForm.product_id == product_id).first()
+        if not link:
+            return {"success": True, "message": "Product not linked to any dosage form", "data": None}
         
         dosage_form = db.query(DosageForm).filter(DosageForm.id == link.dosage_form_id).first()
         requirements = FormulationService.get_dosage_form_requirements(dosage_form.code.value) if dosage_form else {}
         
         return {
-            "product_id": product_id,
-            "dosage_form": dosage_form.to_dict() if dosage_form else None,
-            "batch_quantity": link.batch_quantity,
-            "batch_unit": link.batch_unit,
-            "daily_dose_range": {
-                "min": link.min_daily_dose,
-                "max": link.max_daily_dose,
-                "unit": link.dose_unit
-            },
-            "cleaning_requirements": requirements,
-            "cleaning_level": "LEVEL_2" if dosage_form and dosage_form.requires_sterility else "LEVEL_1"
+            "success": True,
+            "data": {
+                "product_id": product_id,
+                "dosage_form": dosage_form.to_dict() if dosage_form else None,
+                "batch_quantity": link.batch_quantity,
+                "batch_unit": link.batch_unit,
+                "daily_dose_range": {
+                    "min": link.min_daily_dose,
+                    "max": link.max_daily_dose,
+                    "unit": link.dose_unit
+                },
+                "cleaning_requirements": requirements
+            }
         }
     except Exception as e:
         logger.error(f"Error getting product dosage form: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== SAMPLING LOCATION ENDPOINTS ====================
+# ============================================
+# SAMPLING LOCATIONS CRUD - PUBLIC
+# ============================================
 
 @router.get("/equipment/{equipment_id}/sampling-locations")
-def get_equipment_sampling_locations(
-    equipment_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all sampling locations for an equipment"""
+def get_equipment_sampling_locations(equipment_id: int, db: Session = Depends(get_db)):
+    """Get sampling locations for equipment - PUBLIC"""
     try:
         locations = db.query(SamplingLocation).filter(
             SamplingLocation.equipment_id == equipment_id,
@@ -257,6 +338,7 @@ def get_equipment_sampling_locations(
         ).order_by(SamplingLocation.priority).all()
         
         return {
+            "success": True,
             "equipment_id": equipment_id,
             "total_locations": len(locations),
             "locations": [
@@ -268,7 +350,7 @@ def get_equipment_sampling_locations(
                     "is_hard_to_clean": loc.is_hard_to_clean,
                     "is_worst_case": loc.is_worst_case,
                     "priority": loc.priority,
-                    "recommended_method": loc.recommended_method.value,
+                    "recommended_method": loc.recommended_method.value if loc.recommended_method else "swab",
                     "recovery_factor_percent": loc.recovery_factor_percent
                 }
                 for loc in locations
@@ -279,19 +361,26 @@ def get_equipment_sampling_locations(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/sampling-locations/all")
+def get_all_sampling_locations(db: Session = Depends(get_db)):
+    """Get all sampling locations - PUBLIC"""
+    try:
+        locations = db.query(SamplingLocation).all()
+        return {"success": True, "count": len(locations), "data": locations}
+    except Exception as e:
+        logger.error(f"Error getting all sampling locations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/sampling-locations")
-def create_sampling_location(
-    data: SamplingLocationCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Create a sampling location for an equipment"""
+def create_sampling_location(data: SamplingLocationCreate, db: Session = Depends(get_db)):
+    """Create sampling location - PUBLIC"""
     try:
         equipment = db.query(Equipment).filter(Equipment.id == data.equipment_id).first()
         if not equipment:
             raise HTTPException(404, "Equipment not found")
         
-        location = SamplingLocation(**data.model_dump())
+        location = SamplingLocation(**data.dict(), is_active=True)
         db.add(location)
         db.commit()
         db.refresh(location)
@@ -310,19 +399,74 @@ def create_sampling_location(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put("/sampling-locations/{location_id}")
+def update_sampling_location(location_id: int, data: SamplingLocationUpdate, db: Session = Depends(get_db)):
+    """Update sampling location - PUBLIC"""
+    try:
+        location = db.query(SamplingLocation).filter(SamplingLocation.id == location_id).first()
+        if not location:
+            raise HTTPException(404, "Sampling location not found")
+        
+        for key, value in data.dict(exclude_unset=True).items():
+            setattr(location, key, value)
+        
+        db.commit()
+        db.refresh(location)
+        
+        return {"success": True, "message": "Sampling location updated", "data": location}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating sampling location: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/sampling-locations/{location_id}")
+def delete_sampling_location(location_id: int, db: Session = Depends(get_db)):
+    """Delete sampling location - PUBLIC"""
+    try:
+        location = db.query(SamplingLocation).filter(SamplingLocation.id == location_id).first()
+        if not location:
+            raise HTTPException(404, "Sampling location not found")
+        
+        db.delete(location)
+        db.commit()
+        return {"success": True, "message": "Sampling location deleted", "id": location_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting sampling location: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/sampling-locations/all")
+def delete_all_sampling_locations(db: Session = Depends(get_db)):
+    """Delete ALL sampling locations - PUBLIC"""
+    try:
+        count = db.query(SamplingLocation).delete()
+        db.commit()
+        return {"success": True, "message": f"Deleted {count} sampling locations", "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Error deleting all sampling locations: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# SAMPLING RESULTS - PUBLIC
+# ============================================
+
 @router.post("/sampling-results")
-def record_sampling_result(
-    data: SamplingResultCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Record a sampling result"""
+def record_sampling_result(data: SamplingResultCreate, db: Session = Depends(get_db)):
+    """Record sampling result - PUBLIC"""
     try:
         session = db.query(ValidationSession).filter(ValidationSession.id == data.session_id).first()
         if not session:
             raise HTTPException(404, "Validation session not found")
         
-        result = SamplingResult(**data.model_dump())
+        result = SamplingResult(**data.dict())
         db.add(result)
         db.commit()
         db.refresh(result)
@@ -341,15 +485,43 @@ def record_sampling_result(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== FORMULATION EQUIPMENT ENDPOINTS ====================
+@router.get("/sampling-results/session/{session_id}")
+def get_sampling_results_by_session(session_id: int, db: Session = Depends(get_db)):
+    """Get all sampling results for a session - PUBLIC"""
+    try:
+        results = db.query(SamplingResult).filter(SamplingResult.session_id == session_id).all()
+        return {"success": True, "count": len(results), "data": results}
+    except Exception as e:
+        logger.error(f"Error getting sampling results: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/sampling-results/{result_id}")
+def delete_sampling_result(result_id: int, db: Session = Depends(get_db)):
+    """Delete sampling result - PUBLIC"""
+    try:
+        result = db.query(SamplingResult).filter(SamplingResult.id == result_id).first()
+        if not result:
+            raise HTTPException(404, "Sampling result not found")
+        
+        db.delete(result)
+        db.commit()
+        return {"success": True, "message": "Sampling result deleted", "id": result_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting sampling result: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# FORMULATION EQUIPMENT - PUBLIC
+# ============================================
 
 @router.post("/equipment/categorize")
-def categorize_equipment(
-    data: FormulationEquipmentCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Categorize equipment for formulation plants"""
+def categorize_equipment(data: FormulationEquipmentCreate, db: Session = Depends(get_db)):
+    """Categorize equipment for formulation - PUBLIC"""
     try:
         equipment = db.query(Equipment).filter(Equipment.id == data.equipment_id).first()
         if not equipment:
@@ -360,15 +532,13 @@ def categorize_equipment(
         ).first()
         
         if existing:
-            # Update existing
-            for key, value in data.model_dump().items():
+            for key, value in data.dict().items():
                 setattr(existing, key, value)
             db.commit()
             db.refresh(existing)
             return {"success": True, "message": "Equipment categorization updated", "id": existing.id}
         else:
-            # Create new
-            formulation_eq = FormulationEquipment(**data.model_dump())
+            formulation_eq = FormulationEquipment(**data.dict())
             db.add(formulation_eq)
             db.commit()
             db.refresh(formulation_eq)
@@ -381,18 +551,52 @@ def categorize_equipment(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/equipment/category/{category}")
-def get_equipment_by_category(
-    category: EquipmentCategoryEnum,
-    plant: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all equipment of a specific category"""
+@router.put("/formulation-equipment/{fe_id}")
+def update_formulation_equipment(fe_id: int, data: FormulationEquipmentUpdate, db: Session = Depends(get_db)):
+    """Update formulation equipment - PUBLIC"""
     try:
-        query = db.query(FormulationEquipment).filter(
-            FormulationEquipment.category == category
-        )
+        fe = db.query(FormulationEquipment).filter(FormulationEquipment.id == fe_id).first()
+        if not fe:
+            raise HTTPException(404, "Formulation equipment not found")
+        
+        for key, value in data.dict(exclude_unset=True).items():
+            setattr(fe, key, value)
+        
+        db.commit()
+        db.refresh(fe)
+        return {"success": True, "message": "Formulation equipment updated", "data": fe}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating formulation equipment: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/formulation-equipment/{fe_id}")
+def delete_formulation_equipment(fe_id: int, db: Session = Depends(get_db)):
+    """Delete formulation equipment record - PUBLIC"""
+    try:
+        fe = db.query(FormulationEquipment).filter(FormulationEquipment.id == fe_id).first()
+        if not fe:
+            raise HTTPException(404, "Formulation equipment not found")
+        
+        db.delete(fe)
+        db.commit()
+        return {"success": True, "message": "Formulation equipment deleted", "id": fe_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting formulation equipment: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/equipment/category/{category}")
+def get_equipment_by_category(category: str, plant: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get equipment by category - PUBLIC"""
+    try:
+        query = db.query(FormulationEquipment).filter(FormulationEquipment.category == category)
         
         results = []
         for fe in query.all():
@@ -402,46 +606,68 @@ def get_equipment_by_category(
                     "id": fe.id,
                     "equipment_id": fe.equipment_id,
                     "equipment_name": eq.name,
-                    "category": fe.category.value,
+                    "category": fe.category.value if hasattr(fe.category, 'value') else fe.category,
                     "has_cip": fe.has_cip,
                     "has_sip": fe.has_sip,
                     "sampling_points_count": fe.sampling_points_count
                 })
         
-        return results
+        return {"success": True, "count": len(results), "data": results}
     except Exception as e:
         logger.error(f"Error getting equipment by category: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== PLANT TYPE VALIDATION ====================
+@router.get("/formulation-equipment/all")
+def get_all_formulation_equipment(db: Session = Depends(get_db)):
+    """Get all formulation equipment - PUBLIC"""
+    try:
+        records = db.query(FormulationEquipment).all()
+        return {"success": True, "count": len(records), "data": records}
+    except Exception as e:
+        logger.error(f"Error getting all formulation equipment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/formulation-equipment/all")
+def delete_all_formulation_equipment(db: Session = Depends(get_db)):
+    """Delete ALL formulation equipment - PUBLIC"""
+    try:
+        count = db.query(FormulationEquipment).delete()
+        db.commit()
+        return {"success": True, "message": f"Deleted {count} formulation equipment records", "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Error deleting all formulation equipment: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# PLANT TYPE VALIDATION - PUBLIC
+# ============================================
 
 @router.get("/plant-type/{plant_type}/validation-requirements")
-def get_plant_type_validation_requirements(
-    plant_type: PlantTypeEnum,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get cleaning validation requirements for a specific plant type"""
+def get_plant_type_validation_requirements(plant_type: str, db: Session = Depends(get_db)):
+    """Get validation requirements for plant type - PUBLIC"""
     try:
-        requirements = FormulationService.get_plant_type_requirements(plant_type.value)
+        requirements = FormulationService.get_plant_type_requirements(plant_type)
         
         dosage_forms = db.query(DosageForm).filter(
             DosageForm.plant_type == plant_type
         ).all()
         
         return {
-            "plant_type": plant_type.value,
+            "success": True,
+            "plant_type": plant_type,
             "requirements": requirements,
             "dosage_forms_in_plant": [
-                {"id": df.id, "name": df.name, "code": df.code.value}
+                {"id": df.id, "name": df.name, "code": df.code.value if df.code else None}
                 for df in dosage_forms
             ],
             "reference_guidelines": [
                 "APIC Cleaning Validation Guide 2021",
                 "PDA TR 29 - Cleaning Validation",
-                "EMA/CHMP/CVMP/SWP/169430/2012",
-                "USP <1072> Disinfectants and Antiseptics"
+                "EMA/CHMP/CVMP/SWP/169430/2012"
             ]
         }
     except Exception as e:
@@ -449,32 +675,23 @@ def get_plant_type_validation_requirements(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== STERILE LIMIT CALCULATOR (FIXED) ====================
+# ============================================
+# STERILE LIMIT CALCULATOR - PUBLIC
+# ============================================
 
 @router.post("/sterile-limit-calculator")
-def calculate_sterile_limit(
+def calculate_sterile_limit_post(
     maco_mg: float = Query(..., description="MACO in mg", gt=0),
     equipment_area_m2: float = Query(..., description="Equipment surface area in m²", gt=0),
-    endotoxin_factor: float = Query(1.0, description="Endotoxin safety factor", ge=0.1, le=10),
-    current_user: User = Depends(get_current_user)
+    endotoxin_factor: float = Query(1.0, description="Endotoxin safety factor", ge=0.1, le=10)
 ):
-    """
-    Calculate stricter limits for sterile/injectable products
-    
-    - Normal limit: Standard limit for non-sterile products
-    - Sterile limit: 10x stricter limit for sterile/injectable products
-    - Endotoxin limit: EU/ml limit for endotoxin testing
-    
-    Reference: PDA TR 29, EMA/CHMP/CVMP/SWP/169430/2012
-    """
+    """Calculate stricter limits for sterile/injectable products - PUBLIC"""
     try:
-        # Input validation
         if maco_mg <= 0:
             raise HTTPException(status_code=400, detail="MACO must be greater than 0")
         if equipment_area_m2 <= 0:
             raise HTTPException(status_code=400, detail="Equipment area must be greater than 0")
         
-        # Calculate limits
         result = FormulationService.calculate_sterile_limit(
             maco_mg, equipment_area_m2, endotoxin_factor
         )
@@ -490,7 +707,6 @@ def calculate_sterile_limit(
             "recommendation": result.get("recommendation", "Use sterile_limit_ppm for injectable products"),
             "reference": result.get("reference", "PDA TR 29, EMA/CHMP/CVMP/SWP/169430/2012")
         }
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -498,33 +714,24 @@ def calculate_sterile_limit(
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
 
 
-# ==================== ALTERNATIVE GET METHOD FOR STERILE LIMIT (Backward Compatibility) ====================
-
 @router.get("/sterile-limit-calculator")
 def calculate_sterile_limit_get(
     maco_mg: float = Query(..., description="MACO in mg", gt=0),
     equipment_area_m2: float = Query(..., description="Equipment surface area in m²", gt=0),
-    endotoxin_factor: float = Query(1.0, description="Endotoxin safety factor", ge=0.1, le=10),
-    current_user: User = Depends(get_current_user)
+    endotoxin_factor: float = Query(1.0, description="Endotoxin safety factor", ge=0.1, le=10)
 ):
-    """
-    Calculate stricter limits for sterile/injectable products (GET method for backward compatibility)
-    """
-    return calculate_sterile_limit(maco_mg, equipment_area_m2, endotoxin_factor, current_user)
+    """Calculate stricter limits for sterile/injectable products (GET) - PUBLIC"""
+    return calculate_sterile_limit_post(maco_mg, equipment_area_m2, endotoxin_factor)
 
 
-# ==================== INITIALIZE DOSAGE FORMS (Run once) ====================
+# ============================================
+# INITIALIZE DOSAGE FORMS - PUBLIC
+# ============================================
 
 @router.post("/initialize-dosage-forms")
-def initialize_dosage_forms(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Initialize all dosage forms (Admin only)"""
+def initialize_dosage_forms(db: Session = Depends(get_db)):
+    """Initialize all dosage forms - PUBLIC"""
     try:
-        if not current_user.is_admin:
-            raise HTTPException(403, "Admin access required")
-        
         count = 0
         created_forms = []
         
@@ -539,7 +746,7 @@ def initialize_dosage_forms(
                     requires_endotoxin_testing=req.get("requires_endotoxin_testing", False),
                     default_microbial_limit_cfu=req.get("microbial_limit_cfu"),
                     default_endotoxin_limit_eu_ml=req.get("endotoxin_limit_eu_ml"),
-                    recommended_sampling_method=req.get("sampling_method", "swab")
+                    is_active=True
                 )
                 db.add(dosage_form)
                 created_forms.append(code)
@@ -553,9 +760,6 @@ def initialize_dosage_forms(
             "created_forms": created_forms,
             "total_forms": len(FormulationService.DOSAGE_FORM_REQUIREMENTS)
         }
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error initializing dosage forms: {str(e)}")
         db.rollback()

@@ -1,3 +1,4 @@
+# app/api/__init__.py
 """
 API Routes for Cleaning Validation System
 """
@@ -7,15 +8,17 @@ from . import products
 from . import equipment
 from . import calculations
 from . import validation
-from . import reports
 from . import static_data
 from . import dashboard
-from . import cleaning_validation
-from . import protocols
 from . import guidance
 from . import cleaning_process
 from . import training
 from . import formulation
+from . import comprehensive
+from . import hold_times
+from . import protocol_generator
+from . import report_generator 
+from . import ade 
 
 __all__ = [
     "auth",
@@ -23,13 +26,15 @@ __all__ = [
     "equipment",
     "calculations",
     "validation",
-    "reports",
     "static_data",
     "dashboard",
-    "cleaning_validation",
-    "protocols",
     "guidance",
     "cleaning_process",
     "training",
     "formulation",
+    "comprehensive",
+    "hold_times",
+    "protocol_generator",
+    "report_generator", 
+    "ade",
 ]

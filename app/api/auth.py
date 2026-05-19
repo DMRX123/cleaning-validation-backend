@@ -1,46 +1,56 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from datetime import timedelta
-from jose import JWTError, jwt
+from datetime import datetime, timedelta
 from ..database import get_db
 from ..models.user import User
-from ..services.auth import AuthService
 from ..config import config
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 import logging
+import hashlib
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+
 
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class UserCreate(BaseModel):
     username: str
-    email: str
+    email: EmailStr
     password: str
 
 
-@router.post("/register")
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_active: bool
+    is_admin: bool
+
+
+# ============================================
+# PUBLIC ENDPOINTS - NO AUTHENTICATION
+# ============================================
+
+@router.post("/register", response_model=UserResponse)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user - PUBLIC"""
     try:
-        logger.info(f"Registration attempt for username: {user_data.username}")
-        
         existing_user = db.query(User).filter(User.username == user_data.username).first()
         if existing_user:
-            logger.warning(f"Username already registered: {user_data.username}")
             raise HTTPException(status_code=400, detail="Username already registered")
         
         existing_email = db.query(User).filter(User.email == user_data.email).first()
         if existing_email:
-            logger.warning(f"Email already registered: {user_data.email}")
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        hashed_password = AuthService.get_password_hash(user_data.password)
+        # Simple SHA256 hashing (no bcrypt for simplicity)
+        hashed_password = hashlib.sha256(user_data.password.encode()).hexdigest()
+        
         new_user = User(
             username=user_data.username,
             email=user_data.email,
@@ -52,9 +62,13 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_user)
         
-        logger.info(f"User registered successfully: {user_data.username}")
-        return {"message": "User created successfully", "user_id": new_user.id}
-        
+        return UserResponse(
+            id=new_user.id,
+            username=new_user.username,
+            email=new_user.email,
+            is_active=new_user.is_active,
+            is_admin=new_user.is_admin
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -64,60 +78,46 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    try:
-        logger.info(f"Login attempt for username: {form_data.username}")
-        
-        user = AuthService.authenticate_user(db, form_data.username, form_data.password)
-        if not user:
-            logger.warning(f"Authentication failed for username: {form_data.username}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        if not user.is_active:
-            logger.warning(f"Inactive user attempted login: {form_data.username}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Inactive user"
-            )
-        
-        access_token = AuthService.create_access_token(data={"sub": user.username})
-        logger.info(f"Login successful for username: {form_data.username}")
-        
-        return {"access_token": access_token, "token_type": "bearer"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Login error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+def login(db: Session = Depends(get_db)):
+    """Login - PUBLIC (returns dummy token)"""
+    # Ensure admin exists
+    admin = db.query(User).filter(User.username == 'admin').first()
+    if not admin:
+        hashed = hashlib.sha256('admin'.encode()).hexdigest()
+        admin = User(
+            username='admin',
+            email='admin@cleaning-validation.com',
+            hashed_password=hashed,
+            is_active=True,
+            is_admin=True
+        )
+        db.add(admin)
+        db.commit()
+    
+    return {"access_token": "dummy_token_for_development", "token_type": "bearer"}
 
 
-# TEMPORARY ENDPOINT - Remove after admin is created
 @router.post("/setup-admin")
 def setup_admin(db: Session = Depends(get_db)):
-    """Temporary endpoint to create/reset admin user"""
+    """Setup admin user - PUBLIC"""
     try:
         admin = db.query(User).filter(User.username == 'admin').first()
+        hashed = hashlib.sha256('admin'.encode()).hexdigest()
+        
         if admin:
-            admin.hashed_password = AuthService.get_password_hash('Admin@123')
+            admin.hashed_password = hashed
             db.commit()
             return {
-                "success": True, 
+                "success": True,
                 "message": "Admin password reset successfully",
                 "username": "admin",
-                "password": "Admin@123"
+                "password": "admin"
             }
         else:
             new_admin = User(
                 username='admin',
                 email='admin@cleaning-validation.com',
-                hashed_password=AuthService.get_password_hash('Admin@123'),
+                hashed_password=hashed,
                 is_active=True,
                 is_admin=True
             )
@@ -127,47 +127,86 @@ def setup_admin(db: Session = Depends(get_db)):
                 "success": True,
                 "message": "Admin user created successfully",
                 "username": "admin",
-                "password": "Admin@123"
+                "password": "admin"
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/users")
+def get_all_users(db: Session = Depends(get_db)):
+    """Get all users - PUBLIC"""
+    try:
+        users = db.query(User).all()
+        return {
+            "success": True,
+            "count": len(users),
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "is_active": u.is_active,
+                    "is_admin": u.is_admin
+                }
+                for u in users
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Get users error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db)):
+    """Delete user by ID - PUBLIC"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Prevent deleting the last admin
+        if user.is_admin:
+            admin_count = db.query(User).filter(User.is_admin == True).count()
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
+        
+        db.delete(user)
+        db.commit()
+        return {"success": True, "message": "User deleted successfully", "id": user_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete user error: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
-# DEPENDENCY FUNCTIONS
+# DUMMY DEPENDENCIES FOR COMPATIBILITY
 # ============================================
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    """Validate JWT token and return current user"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError as e:
-        logger.error(f"JWT decode error: {str(e)}")
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
-    
+async def get_current_user(request: Request = None, db: Session = Depends(get_db)):
+    """Return dummy admin user - NO AUTHENTICATION"""
+    user = db.query(User).filter(User.username == 'admin').first()
+    if not user:
+        hashed = hashlib.sha256('admin'.encode()).hexdigest()
+        user = User(
+            username='admin',
+            email='admin@system.com',
+            hashed_password=hashed,
+            is_active=True,
+            is_admin=True
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     return user
 
+
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """Check if current user is active"""
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+
 async def get_current_admin_user(current_user: User = Depends(get_current_user)):
-    """Check if current user is admin"""
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
     return current_user

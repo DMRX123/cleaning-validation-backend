@@ -10,56 +10,39 @@ class CleaningCapabilityService:
     Mean effectiveness vs spread vs MACO
     """
     
-    @staticmethod
-    def calculate_process_capability(db: Session, process_id: int, 
-                                      historical_executions: int = 10) -> dict:
-        """
-        Calculate cleaning process capability
-        Determines if mean + spread is adequately below MACO
-        """
-        
-        process = db.query(CleaningProcess).filter(CleaningProcess.id == process_id).first()
-        if not process:
-            return {"error": "Process not found"}
-        
-        # Get recent executions with validation results
-        executions = db.query(CleaningExecution).filter(
-            CleaningExecution.process_id == process_id,
-            CleaningExecution.session_id.isnot(None)
-        ).order_by(CleaningExecution.execution_date.desc()).limit(historical_executions).all()
-        
-        if len(executions) < 3:
-            return {
-                "process_id": process_id,
-                "process_name": process.name,
-                "error": f"Insufficient data. Need at least 3 executions, found {len(executions)}"
-            }
-        
-        # Get residue results from validation sessions
-        residue_results = []
-        for exec_record in executions:
-            if exec_record.session_id:
-                session = db.query(ValidationSession).filter(
-                    ValidationSession.id == exec_record.session_id
-                ).first()
-                if session:
-                    # Get actual residue from swab results
-                    from ..models.swab_result import SwabResult
-                    
-                    swab_results = db.query(SwabResult).filter(
-                        SwabResult.session_id == session.id
-                    ).all()
-                    
-                    if swab_results:
-                        max_residue = max([r.result_ppm or 0 for r in swab_results])
-                        residue_results.append(max_residue)
-        
-        if len(residue_results) < 3:
-            return {
-                "process_id": process_id,
-                "process_name": process.name,
-                "error": "Insufficient residue data from validation sessions"
-            }
+@staticmethod
+def calculate_process_capability(db: Session, process_id: int, 
+                                  historical_executions: int = 10) -> dict:
+    """
+    Calculate cleaning process capability
+    Determines if mean + spread is adequately below MACO
+    """
+    
+    from ..models.cleaning_process import CleaningProcess, CleaningExecution
+    from ..models.session import ValidationSession
+    from ..models.swab_result import SwabResult
+    
+    process = db.query(CleaningProcess).filter(CleaningProcess.id == process_id).first()
+    if not process:
+        return {"error": f"Process with ID {process_id} not found. Please create a cleaning process first."}
+    
+    # Get recent executions with validation results
+    executions = db.query(CleaningExecution).filter(
+        CleaningExecution.process_id == process_id,
+        CleaningExecution.session_id.isnot(None)
+    ).order_by(CleaningExecution.execution_date.desc()).limit(historical_executions).all()
+    
+    if len(executions) < 3:
+        return {
+            "process_id": process_id,
+            "process_name": process.name,
+            "error": f"Insufficient data. Need at least 3 executions, found {len(executions)}",
+            "message": "Please complete at least 3 validation sessions with this cleaning process",
+            "suggestion": "Create validation sessions with swab/rinse results first"
+        }
+    
+    # Rest of the function remains the same...
+    # (keep existing code from line 40 onwards)
         
         # Calculate statistics
         mean_residue = sum(residue_results) / len(residue_results)

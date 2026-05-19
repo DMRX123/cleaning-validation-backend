@@ -24,6 +24,11 @@ from .cleaning_process import (
     CleaningCapabilityRequest, CleaningCapabilityResponse,
     CleaningTypeEnum, CleaningStep, CleaningAgent
 )
+from .hold_time import (
+    DirtyHoldTimeCreate, DirtyHoldTimeUpdate, DirtyHoldTimeResponse,
+    CleanHoldTimeCreate, CleanHoldTimeUpdate, CleanHoldTimeResponse,
+    HoldTimeValidationCreate, HoldTimeValidationResponse
+)
 
 __all__ = [
     # Product Schemas
@@ -76,4 +81,14 @@ __all__ = [
     "CleaningTypeEnum",
     "CleaningStep",
     "CleaningAgent",
+    
+    # Hold Time Schemas (Section 9.7)
+    "DirtyHoldTimeCreate",
+    "DirtyHoldTimeUpdate",
+    "DirtyHoldTimeResponse",
+    "CleanHoldTimeCreate",
+    "CleanHoldTimeUpdate",
+    "CleanHoldTimeResponse",
+    "HoldTimeValidationCreate",
+    "HoldTimeValidationResponse",
 ]

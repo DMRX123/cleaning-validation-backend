@@ -18,6 +18,7 @@ class ValidationSession(Base):
         Index('idx_validation_sessions_process', 'process_id'),
         Index('idx_validation_sessions_status', 'status'),
         Index('idx_validation_sessions_code', 'session_code'),
+        Index('idx_validation_sessions_created', 'created_at'),
     )
     
     id = Column(Integer, primary_key=True, index=True)
@@ -32,7 +33,6 @@ class ValidationSession(Base):
     next_product_id = Column(Integer, ForeignKey("products.id"))
     process_id = Column(Integer, ForeignKey("cleaning_processes.id"), nullable=True)
     
-    # FIXED: Added overlaps parameter to fix SAWarning
     previous_product = relationship(
         "Product", 
         foreign_keys=[previous_product_id], 
@@ -62,3 +62,36 @@ class ValidationSession(Base):
     swab_results = relationship("SwabResult", back_populates="session")
     rinse_results = relationship("RinseResult", back_populates="session")
     session_equipment = relationship("SessionEquipment", back_populates="session")
+    
+    def get_pass_status(self) -> dict:
+        """Calculate if validation session passed"""
+        from ..models.swab_result import SwabResult
+        from ..models.rinse_result import RinseResult
+        
+        swab_results = self.swab_results
+        rinse_results = self.rinse_results
+        
+        all_swab_pass = True
+        for r in swab_results:
+            if r.result_ppm and self.swab_limit_ppm and r.result_ppm > self.swab_limit_ppm:
+                all_swab_pass = False
+                break
+        
+        all_rinse_pass = True
+        for r in rinse_results:
+            if r.result_ppm and self.rinse_limit_ppm and r.result_ppm > self.rinse_limit_ppm:
+                all_rinse_pass = False
+                break
+        
+        overall_pass = all_swab_pass and all_rinse_pass
+        
+        return {
+            "session_id": self.id,
+            "session_code": self.session_code,
+            "status": self.status,
+            "all_swab_pass": all_swab_pass,
+            "all_rinse_pass": all_rinse_pass,
+            "overall_pass": overall_pass,
+            "swab_limit_ppm": self.swab_limit_ppm,
+            "rinse_limit_ppm": self.rinse_limit_ppm
+        }

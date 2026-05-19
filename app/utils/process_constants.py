@@ -43,10 +43,10 @@ DEFAULT_CLEANING_PARAMETERS = {
 
 # Capability index thresholds (Section 6.0 Figure 2)
 CAPABILITY_THRESHOLDS = {
-    "excellent": 1.33,      # Cpk >= 1.33 - Process is capable
-    "acceptable": 1.00,     # Cpk >= 1.00 - Process is acceptable
-    "marginal": 0.67,       # Cpk >= 0.67 - Process needs improvement
-    "unacceptable": 0.00    # Cpk < 0.67 - Process is not capable
+    "excellent": 1.33,
+    "acceptable": 1.00,
+    "marginal": 0.67,
+    "unacceptable": 0.00
 }
 
 # Risk levels based on capability

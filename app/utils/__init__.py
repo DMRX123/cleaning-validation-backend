@@ -42,25 +42,6 @@ from .guideline_helpers import (
     get_worst_case_rating
 )
 
-# APIC Guideline Constants (2021)
-from .guideline_constants import (
-    UNCERTAINTY_FACTORS,
-    TTC_VALUES_UG_PER_DAY,
-    CLEANING_LEVELS,
-    WORST_CASE_WEIGHTS,
-    MICROBIOLOGICAL_LIMITS,
-    HOLD_TIME_DEFAULTS,
-    PRODUCTION_TYPE_FACTORS,
-)
-
-# Section 6.0 - Process Control Constants
-from .process_constants import (
-    DEFAULT_CLEANING_PARAMETERS,
-    CAPABILITY_THRESHOLDS,
-    RISK_LEVELS,
-    CLEANING_TYPE_REQUIREMENTS,
-)
-
 __all__ = [
     # Excel Utilities
     "import_products_from_excel",
@@ -103,30 +84,15 @@ __all__ = [
     "DEFAULT_LOQ_LOD_RATIO",
     
     # APIC Guideline Helpers
-    "calculate_ade_pde",           # Section 4.2.1.1
-    "calculate_ttc",               # Section 4.2.1.3
-    "calculate_maco_ade",          # Section 4.2.1
-    "calculate_maco_10ppm",        # Section 4.2.2
-    "calculate_maco_ttc",          # Section 4.2.1.3
-    "calculate_swab_limit",        # Section 4.2.4
-    "calculate_rinse_limit",       # Section 4.2.5
-    "calculate_carry_over_swab",   # Section 4.2.4
-    "calculate_carry_over_rinse",  # Section 8.3.2
-    "get_cleaning_level",          # Section 5.2
-    "get_worst_case_rating",       # Section 7.4
-    
-    # APIC Guideline Constants (2021)
-    "UNCERTAINTY_FACTORS",
-    "TTC_VALUES_UG_PER_DAY",
-    "CLEANING_LEVELS",
-    "WORST_CASE_WEIGHTS",
-    "MICROBIOLOGICAL_LIMITS",
-    "HOLD_TIME_DEFAULTS",
-    "PRODUCTION_TYPE_FACTORS",
-    
-    # Section 6.0 - Process Control Constants
-    "DEFAULT_CLEANING_PARAMETERS",
-    "CAPABILITY_THRESHOLDS",
-    "RISK_LEVELS",
-    "CLEANING_TYPE_REQUIREMENTS",
+    "calculate_ade_pde",
+    "calculate_ttc",
+    "calculate_maco_ade",
+    "calculate_maco_10ppm",
+    "calculate_maco_ttc",
+    "calculate_swab_limit",
+    "calculate_rinse_limit",
+    "calculate_carry_over_swab",
+    "calculate_carry_over_rinse",
+    "get_cleaning_level",
+    "get_worst_case_rating",
 ]
