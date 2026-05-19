@@ -277,12 +277,14 @@ def create_session(data: SessionCreate, db: Session = Depends(get_db)):
         
         session_code = f"VAL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
         
+        # FIX: Get equipment from same plant
         equipment_list = db.query(Equipment).filter(Equipment.plant == previous_product.plant).limit(5).all()
         total_surface_area = sum(eq.surface_area for eq in equipment_list) if equipment_list else 100.0
         
-        if data.extra_area_percentage > 0:
+        if data.extra_area_percentage and data.extra_area_percentage > 0:
             total_surface_area = total_surface_area * (1 + data.extra_area_percentage / 100)
         
+        # FIX: Create session with only valid fields
         new_session = ValidationSession(
             session_code=session_code,
             previous_product_id=data.previous_product_id,
@@ -313,6 +315,7 @@ def create_session(data: SessionCreate, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Session creation error: {str(e)}")
         db.rollback()
+        # Return proper error message
         raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
 
 
